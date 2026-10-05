@@ -153,26 +153,40 @@ Exploratory Data Analysis was performed to discover pollutant distributions, sea
 
 ## 6. Feature Selection / Engineering
 
-To help machine learning models capture atmospheric physical processes without requiring deep differential equation solvers, we engineered five domain-inspired features:
+To help machine learning models capture atmospheric physical processes without requiring complex differential equation solvers, we engineered five domain-inspired features:
 
-1. **Particulate Fine-Fraction Ratio (`PM_Ratio`):**
-   $$\text{PM\_Ratio} = \frac{PM_{2.5}}{PM_{10}}$$
-   *Physical Meaning:* Differentiates between combustion-driven episodes (high fine-particulate fraction from vehicles/biomass burning, ratio $> 0.6$) and windblown crustal dust storms (coarse fraction dominant, ratio $< 0.4$).
+### 1. Particulate Fine-Fraction Ratio (`PM_Ratio`)
 
-2. **Dispersion / Ventilation Proxy (`Dispersion_Index`):**
-   $$\text{Dispersion\_Index} = \frac{\text{Wind\_Speed} + 1.0}{PM_{2.5} + 1.0}$$
-   *Physical Meaning:* Represents the capacity of the boundary layer to flush out particulate matter per unit concentration.
+$$
+\text{PM\_Ratio} = \frac{\text{PM}_{2.5}}{\text{PM}_{10}}
+$$
 
-3. **Atmospheric Heat-Moisture Index (`Heat_Moisture_Index`):**
-   $$\text{Heat\_Moisture\_Index} = \frac{\text{Temperature} \times \text{Humidity}}{100}$$
-   *Physical Meaning:* Captures air mass stagnation and vapor saturation conditions that foster secondary aerosol nucleation.
+- **Physical Meaning:** Differentiates between combustion-driven episodes (high fine-particulate fraction from vehicular exhaust and biomass burning, where ratio $> 0.6$) and windblown crustal dust storms (coarse fraction dominant, where ratio $< 0.4$).
 
-4. **Temporal Calendar Components (`Month`, `DayOfWeek`, `Is_Weekend`):**
-   *Physical Meaning:* Captures weekly anthropogenic emission cycles (reduced industrial/commercial traffic on weekends).
+### 2. Dispersion / Ventilation Proxy (`Dispersion_Index`)
 
-5. **One-Hot Encoding for Station and Season:**
-   - Categorical indicators for geographic station bias (`Station_Station_North`, `Station_Station_South`, `Station_Station_West`).
-   - Seasonal indicators (`Season_Post-Monsoon`, `Season_Summer`, `Season_Winter`).
+$$
+\text{Dispersion\_Index} = \frac{\text{Wind\_Speed} + 1.0}{\text{PM}_{2.5} + 1.0}
+$$
+
+- **Physical Meaning:** Represents the capacity of the atmospheric boundary layer to flush out particulate matter per unit mass concentration (ventilation capacity).
+
+### 3. Atmospheric Heat-Moisture Index (`Heat_Moisture_Index`)
+
+$$
+\text{Heat\_Moisture\_Index} = \frac{\text{Temperature} \times \text{Humidity}}{100}
+$$
+
+- **Physical Meaning:** Captures air mass stagnation and vapor saturation conditions that foster secondary aerosol nucleation and photochemical reaction rates.
+
+### 4. Temporal Calendar Components (`Month`, `DayOfWeek`, `Is_Weekend`)
+
+- **Physical Meaning:** Captures periodic weekly and seasonal anthropogenic emission cycles (e.g., lower industrial output and altered traffic profiles on weekends).
+
+### 5. Categorical Encodings (Station & Season)
+
+- **Station Indicators:** One-hot encoded categorical dummies (`Station_Station_North`, `Station_Station_South`, `Station_Station_West`) capturing localized emission baselines.
+- **Seasonal Indicators:** One-hot encoded dummies (`Season_Post-Monsoon`, `Season_Summer`, `Season_Winter`) capturing synoptic meteorological shifts.
 
 **Final Model Feature Space:** 21 numerical and encoded features.
 
@@ -210,22 +224,34 @@ We deliberately evaluated and compared models spanning increasing complexity to 
 
 #### 1. Linear Regression (Baseline Model)
 - **Mathematical Form:**
-  $$\hat{y} = \beta_0 + \sum_{j=1}^{p} \beta_j X_j$$
-  Solved via Ordinary Least Squares (OLS) closed-form normal equation: $\hat{\beta} = (X^T X)^{-1} X^T y$.
+
+$$
+\hat{y} = \beta_0 + \sum_{j=1}^{p} \beta_j X_j
+$$
+
+- **Optimization:** Solved via Ordinary Least Squares (OLS) closed-form normal equation: $\hat{\beta} = (X^T X)^{-1} X^T y$.
 - **Why We Used It:** Serves as the fundamental interpretable baseline. Helps us see how much of AQI can be approximated as a simple linear combination of pollutants.
 - **Limitation:** AQI sub-index calculations are piecewise linear with breakpoint threshold transitions; standard linear regression cannot create sharp threshold slopes and produces larger residuals at boundary points.
 
 #### 2. Decision Tree Regressor (Non-Linear Single Tree)
 - **Mathematical Form:** Recursively partitions the feature space into axis-aligned hyper-rectangles $R_m$ that minimize within-node variance (MSE):
-  $$\text{MSE}(R_m) = \frac{1}{N_m} \sum_{i \in R_m} (y_i - \bar{y}_m)^2$$
-- **Why We Used It:** Naturally captures if-else threshold rules (e.g., "if $PM_{2.5} > 120$ and Wind $< 5$, assign Severe").
+
+$$
+\text{MSE}(R_m) = \frac{1}{N_m} \sum_{i \in R_m} (y_i - \bar{y}_m)^2
+$$
+
+- **Why We Used It:** Naturally captures if-else threshold rules (e.g., "if $\text{PM}_{2.5} > 120$ and Wind $< 5$, assign Severe").
 - **Regularization:** Tuned with `max_depth=6` and `min_samples_split=10` to avoid memorizing noise.
 - **Limitation:** Step-function nature creates piecewise flat predictions, producing moderate variance.
 
 #### 3. Random Forest Regressor (Ensemble Bagging)
 - **Mathematical Form:** Constructs an ensemble of $B=100$ de-correlated decision trees trained on bootstrap samples of the training data. The final prediction averages individual tree outputs:
-  $$\hat{y}_{\text{RF}} = \frac{1}{B} \sum_{b=1}^{B} T_b(X)$$
-- **Why We Used It:** Bagging reduces single-tree variance drastically without increasing bias. Random subspace selection (evaluating random subsets of features at each split) de-correlates trees, making the ensemble resilient to collinearity between $PM_{2.5}$ and $PM_{10}$.
+
+$$
+\hat{y}_{\text{RF}} = \frac{1}{B} \sum_{b=1}^{B} T_b(X)
+$$
+
+- **Why We Used It:** Bagging reduces single-tree variance drastically without increasing bias. Random subspace selection (evaluating random subsets of features at each split) de-correlates trees, making the ensemble resilient to collinearity between $\text{PM}_{2.5}$ and $\text{PM}_{10}$.
 
 ---
 
@@ -233,12 +259,20 @@ We deliberately evaluated and compared models spanning increasing complexity to 
 
 #### 1. Logistic Regression (Multinomial Baseline)
 - **Mathematical Form:** Computes class probabilities using the softmax activation function:
-  $$P(Y = k \mid X) = \frac{e^{\beta_k^T X}}{\sum_{j=1}^{K} e^{\beta_j^T X}}$$
+
+$$
+P(Y = k \mid X) = \frac{e^{\beta_k^T X}}{\sum_{j=1}^{K} e^{\beta_j^T X}}
+$$
+
 - **Why We Used It:** Standard linear classification benchmark that outputs calibrated class probabilities.
 
 #### 2. Random Forest Classifier (Multi-Class Ensemble)
 - **Mathematical Form:** Ensemble of classification trees voting on category membership, splitting nodes based on the Gini Impurity metric:
-  $$G = 1 - \sum_{k=1}^{K} p_k^2$$
+
+$$
+G = 1 - \sum_{k=1}^{K} p_k^2
+$$
+
 - **Why We Used It:** Capable of establishing complex, non-linear decision boundaries between adjacent AQI tiers (e.g., Moderate vs. Poor).
 
 ---
