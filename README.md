@@ -279,154 +279,18 @@ $$
 
 ## 9. Model Training, Validating and Testing
 
-To ensure rigorous scientific validation, all models were trained on the preprocessed training set ($N=2,336$), validated using 5-Fold Cross-Validation, and evaluated against the unseen held-out test set ($N=584$).
+All models were trained on the preprocessed training set ($N=2,336$), validated using 5-Fold Cross-Validation, and evaluated on the held-out test set ($N=584$).
 
----
+### Execution Summary:
+- **Feature Scaling:** All features normalized to $\mu = 0, \sigma = 1$ via `StandardScaler`.
+- **Cross-Validation Results:**
+  - Linear Regression 5-Fold $R^2$: $0.9474 \pm 0.0073$
+  - Decision Tree 5-Fold $R^2$: $0.9820 \pm 0.0025$
+  - Random Forest 5-Fold $R^2$: $\mathbf{0.9904 \pm 0.0045}$
+  - Logistic Regression 5-Fold Accuracy: $82.49\% \pm 1.06\%$
+  - Random Forest Classifier 5-Fold Accuracy: $\mathbf{94.65\% \pm 0.72\%}$
 
-### 1. Training & Cross-Validation Workflow
-
-1. **Stratified Train-Test Partitioning:**
-   - **Training Set ($80\%$, $N=2,336$):** Used for parameter estimation, recursive tree partitioning, and cross-validation fold evaluation.
-   - **Testing Set ($20\%$, $N=584$):** Completely quarantined from model fitting and scaling pipelines; serves as the final ground-truth evaluation benchmark.
-   - Partitioning was stratified across the 6 AQI health categories to maintain identical class proportions across both splits.
-
-2. **5-Fold Cross-Validation Strategy:**
-   - For regression models, **$K$-Fold Cross-Validation ($K=5$, shuffled)** was applied to the training data.
-   - For classification models, **Stratified $K$-Fold Cross-Validation ($K=5$, shuffled)** was applied to preserve class distributions in every fold.
-   - Cross-validation measures model stability across multiple subsets, confirming that high test scores are not artifacts of a favorable split.
-
-```
-Total Clean Dataset (N = 2,920)
- ├── 80% Training Set (N = 2,336)
- │    ├── Fold 1: [Train: 80% | Val: 20%] -> Metric_1
- │    ├── Fold 2: [Train: 80% | Val: 20%] -> Metric_2
- │    ├── Fold 3: [Train: 80% | Val: 20%] -> Metric_3
- │    ├── Fold 4: [Train: 80% | Val: 20%] -> Metric_4
- │    └── Fold 5: [Train: 80% | Val: 20%] -> Metric_5
- │         └── Mean CV Score +/- Std Dev (Generalization Stability)
- └── 20% Held-Out Testing Set (N = 584) -> Final Benchmark Evaluation
-```
-
----
-
-### 2. In-Depth Model Breakdown, Hyperparameters & Practical Use
-
-#### A. Linear Regression (Ordinary Least Squares)
-- **Role & Theoretical Foundation:** Establishes the baseline parametric benchmark. It computes the direct weighted sum of all criteria pollutants and meteorological variables using the closed-form normal equation:
-
-$$
-\hat{\beta} = (X^T X)^{-1} X^T y
-$$
-
-- **Hyperparameter Configuration:**
-  - `fit_intercept=True`: Allows non-zero baseline AQI even when measured concentrations approach zero.
-  - Features standardized to $\mu=0, \sigma=1$ to enable direct comparison of standardized regression weights ($\beta$).
-- **5-Fold CV Score:** $R^2 = 0.9474 \pm 0.0073$ (Test $R^2 = 0.9428$, Test MAE $= 18.32$)
-- **Practical Use & Best-Fit Scenario:**
-  - **Embedded / Edge Computing:** Ideal for low-power microcontrollers (e.g., ESP32, STM32, Arduino) operating at remote roadside monitoring nodes with minimal RAM and CPU cycles.
-  - **Interpretability:** Provides immediate insight into the baseline marginal contribution of each pollutant unit.
-- **Why It Falls Short for Production:** AQI calculations are piecewise linear with sharp slope increases at hazardous breakpoints (e.g., when $PM_{2.5}$ crosses $120\ \mu g/m^3$). Linear regression cannot alter its slope dynamically, leading to systematic under-prediction during severe pollution episodes.
-
-#### B. Decision Tree Regressor (CART)
-- **Role & Theoretical Foundation:** A non-parametric model that recursively partitions the multi-dimensional feature space into axis-aligned rectangular regions, assigning the mean training target of each leaf node as the prediction:
-
-$$
-\hat{y} = \frac{1}{|R_m|} \sum_{i \in R_m} y_i
-$$
-
-- **Hyperparameter Tuning & Regularization:**
-  - `criterion='squared_error'`: Optimizes splits to minimize residual variance.
-  - `max_depth=6`: Constrained tree depth to prevent deep leaf isolation and memorize sensor noise.
-  - `min_samples_split=10`: Requires at least 10 samples before allowing a sub-branch split.
-  - `min_samples_leaf=4`: Ensures leaf predictions are backed by at least 4 daily observations.
-- **5-Fold CV Score:** $R^2 = 0.9820 \pm 0.0025$ (Test $R^2 = 0.9852$, Test MAE $= 7.56$)
-- **Practical Use & Best-Fit Scenario:**
-  - **Regulatory & Policy Auditing:** Generates human-readable if-then decision rules (e.g., *"IF PM2.5 > 120 AND Wind Speed < 6 km/h THEN AQI = Very Poor"*), making it valuable for environmental regulatory agencies requiring transparent, explainable decision logic.
-- **Why It Has Limitations:** Decision trees output discontinuous step functions. Near partition boundaries, a tiny 1-unit shift in wind speed can cause an abrupt jump in predicted AQI.
-
-#### C. Random Forest Regressor (Ensemble Bagging) — **Top Performer**
-- **Role & Theoretical Foundation:** An ensemble of $B=100$ de-correlated decision trees built using Bootstrap Aggregating (Bagging). Each tree is trained on a distinct bootstrap sample (sampling with replacement) of the training dataset:
-
-$$
-\hat{y}_{\text{RF}} = \frac{1}{B} \sum_{b=1}^{B} T_b(X)
-$$
-
-- **Hyperparameter Configuration:**
-  - `n_estimators=100`: Sufficient ensemble size for variance stabilization without excessive latency.
-  - `max_depth=12`: Allows individual trees to capture deep atmospheric interactions.
-  - `min_samples_split=5`: Regularizes individual tree leaf expansion.
-  - `max_features='sqrt'`: Evaluates a random subset of $\sqrt{p}$ features at each candidate split to de-correlate individual trees.
-- **5-Fold CV Score:** $R^2 = \mathbf{0.9904 \pm 0.0045}$ (Test $R^2 = \mathbf{0.9889}$, Test MAE $= \mathbf{3.44}$)
-- **Practical Use & Best-Fit Scenario:**
-  - **Production Forecasting Engines:** The gold standard for municipal air quality dashboards, smart city platforms, and mobile apps requiring high numerical precision across clean, moderate, and extreme winter smog conditions.
-- **Why It Outperforms Single Trees:** By averaging 100 de-correlated trees, the individual errors and step-function discontinuities cancel out, smoothing the predictions and slashing test MAE from $18.32 \to 3.44$ ($81.2\%$ error reduction).
-
-#### D. Logistic Regression (Multinomial Softmax Classifier)
-- **Role & Theoretical Foundation:** Linear classification baseline utilizing the multi-class softmax link function to model category posterior probabilities:
-
-$$
-P(Y = k \mid X) = \frac{e^{\beta_k^T X}}{\sum_{j=1}^{K} e^{\beta_j^T X}}
-$$
-
-- **Hyperparameter Configuration:**
-  - `multi_class='multinomial'`: Directly minimizes cross-entropy loss across all 6 classes simultaneously rather than training 6 separate binary one-vs-rest classifiers.
-  - `solver='lbfgs'`, `max_iter=1000`: Guaranteed convergence on convex cross-entropy surface.
-- **5-Fold CV Score:** Accuracy $= 82.49\% \pm 1.06\%$ (Test Accuracy $= 83.22\%$, Weighted F1 $= 0.8321$)
-- **Practical Use & Best-Fit Scenario:**
-  - **Probabilistic Risk Scoring:** Provides calibrated confidence probabilities useful for medical alerting systems where knowing the marginal likelihood of transitioning from *Moderate* to *Poor* is necessary.
-- **Limitation:** Assumes linear hyperplanes separate the classes in feature space. In reality, the boundary between *Moderate* and *Poor* involves non-linear interactions between particulate load and wind dispersion, causing $16.8\%$ misclassification.
-
-#### E. Random Forest Classifier (Multi-Class Ensemble) — **Top Classifier**
-- **Role & Theoretical Foundation:** Bagged ensemble of multi-class decision trees voting on category membership, splitting nodes to minimize multi-class Gini Impurity:
-
-$$
-G = 1 - \sum_{k=1}^{K} p_k^2
-$$
-
-- **Hyperparameter Configuration:**
-  - `n_estimators=100`, `max_depth=12`, `min_samples_split=5`, `class_weight='balanced_subsample'`
-- **5-Fold CV Score:** Accuracy $= \mathbf{94.65\% \pm 0.72\%}$ (Test Accuracy $= \mathbf{94.69\%}$, Weighted F1 $= \mathbf{0.9467}$)
-- **Practical Use & Best-Fit Scenario:**
-  - **Automated Public Health Advisory Alerts:** Dispatches emergency school closures, outdoor sports cancellations, and hospital surge preparations based on confirmed category classification.
-
----
-
-### 3. Model Comparison & Trade-Off Matrix
-
-| Evaluation Dimension | Linear Regression | Decision Tree | Random Forest Regressor | Logistic Regression | Random Forest Classifier |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| **Primary Task** | Regression (Continuous) | Regression (Continuous) | Regression (Continuous) | Classification (6 Classes) | Classification (6 Classes) |
-| **Test Accuracy / $R^2$** | $R^2 = 0.9428$ | $R^2 = 0.9852$ | $\mathbf{R^2 = 0.9889}$ | $\text{Acc} = 83.22\%$ | $\mathbf{\text{Acc} = 94.69\%}$ |
-| **Test Error (MAE / F1)** | $\text{MAE} = 18.32$ | $\text{MAE} = 7.56$ | $\mathbf{\text{MAE} = 3.44}$ | $\text{F1} = 0.8321$ | $\mathbf{\text{F1} = 0.9467}$ |
-| **5-Fold CV Stability** | $\pm 0.0073$ | $\pm 0.0025$ | $\mathbf{\pm 0.0045}$ | $\pm 1.06\%$ | $\mathbf{\pm 0.72\%}$ |
-| **Interpretability** | High (Coefficients) | High (Tree Flowchart) | Medium (Feature Rank) | High (Log-Odds) | Medium (Feature Rank) |
-| **Inference Latency** | $< 0.1\ \text{ms}$ | $< 0.2\ \text{ms}$ | $\approx 2.5\ \text{ms}$ | $< 0.1\ \text{ms}$ | $\approx 3.0\ \text{ms}$ |
-| **Memory Footprint** | $1.5\ \text{KB}$ | $9.5\ \text{KB}$ | $5.1\ \text{MB}$ | $2.2\ \text{KB}$ | $3.5\ \text{MB}$ |
-| **Non-Linear Dynamics** | Poor (Linear only) | Good (Step threshold) | Excellent (Ensemble) | Poor (Linear plane) | Excellent (Ensemble) |
-| **Recommended Deployment** | IoT Edge / Sensor Node | Regulatory Auditing | **Central Cloud Engine** | Probabilistic Baselines | **Public Health Warning** |
-
----
-
-### 4. Bias-Variance Trade-Off Analysis
-
-```
-Bias & Variance Spectrum:
-
-Linear Models (High Bias, Low Variance)
-  │   - Underfits non-linear breakpoint curvature
-  │   - Stable across folds, but higher residual ceiling (MAE ~ 18.32)
-  ▼
-Single Decision Tree (Low Bias, High Variance)
-  │   - Fits breakpoint thresholds accurately
-  │   - Prone to small sample perturbations and noisy splits
-  ▼
-Random Forest Ensemble (Low Bias, Low Variance)  <-- OPTIMAL SOLUTION
-      - Bagging averages out individual tree variance
-      - Random feature subspace de-correlates multi-pollutant collinearity
-      - Achieves minimal test error (MAE ~ 3.44) and rock-solid CV consistency
-```
-
-This trade-off analysis proves that **Random Forest strikes the optimal empirical balance** for atmospheric modeling, combining the threshold-capturing capability of decision trees with the variance reduction of ensemble bagging.
+The low variance across all 5 cross-validation folds confirms that the models generalize consistently and are not overfitting to an arbitrary split.
 
 ---
 
