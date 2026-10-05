@@ -1,0 +1,52 @@
+{
+  "regression_metrics": {
+    "Linear Regression": {
+      "CV_R2_Mean": 0.9474,
+      "CV_R2_Std": 0.0073,
+      "Train_MAE": 17.4135,
+      "Train_RMSE": 24.8242,
+      "Train_R2": 0.9491,
+      "Test_MAE": 18.3153,
+      "Test_RMSE": 26.1315,
+      "Test_R2": 0.9428
+    },
+    "Decision Tree": {
+      "CV_R2_Mean": 0.982,
+      "CV_R2_Std": 0.0025,
+      "Train_MAE": 6.1503,
+      "Train_RMSE": 9.2602,
+      "Train_R2": 0.9929,
+      "Test_MAE": 7.563,
+      "Test_RMSE": 13.3093,
+      "Test_R2": 0.9852
+    },
+    "Random Forest": {
+      "CV_R2_Mean": 0.9904,
+      "CV_R2_Std": 0.0045,
+      "Train_MAE": 1.7957,
+      "Train_RMSE": 4.3908,
+      "Train_R2": 0.9984,
+      "Test_MAE": 3.4429,
+      "Test_RMSE": 11.5005,
+      "Test_R2": 0.9889
+    }
+  },
+  "classification_metrics": {
+    "Logistic Regression": {
+      "CV_Accuracy_Mean": 0.8249,
+      "CV_Accuracy_Std": 0.0106,
+      "Test_Accuracy": 0.8322,
+      "Test_Precision_Weighted": 0.8348,
+      "Test_Recall_Weighted": 0.8322,
+      "Test_F1_Weighted": 0.8321
+    },
+    "Random Forest Classifier": {
+      "CV_Accuracy_Mean": 0.9465,
+      "CV_Accuracy_Std": 0.0072,
+      "Test_Accuracy": 0.9469,
+      "Test_Precision_Weighted": 0.9482,
+      "Test_Recall_Weighted": 0.9469,
+      "Test_F1_Weighted": 0.9467
+    }
+  }
+}

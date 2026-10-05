@@ -1,0 +1,23 @@
+[
+  "PM2.5",
+  "PM10",
+  "NO2",
+  "SO2",
+  "CO",
+  "O3",
+  "Temperature",
+  "Humidity",
+  "Wind_Speed",
+  "PM_Ratio",
+  "Dispersion_Index",
+  "Heat_Moisture_Index",
+  "Month",
+  "DayOfWeek",
+  "Is_Weekend",
+  "Station_Station_North",
+  "Station_Station_South",
+  "Station_Station_West",
+  "Season_Post-Monsoon",
+  "Season_Summer",
+  "Season_Winter"
+]

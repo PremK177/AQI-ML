@@ -1,0 +1,33 @@
+For my college mini-project on machine learning minor, create a project with the topic
+
+Air Quality Index Prediction and Analysis
+
+Suggested ML Focus - Regression / Classification
+
+--------------------------
+
+the main point of the project isn't necessarily to create the best project, but to rather show how we arrived at the solution, how we implemented it and how data was used
+
+Hence, keep the project simple, not too big but also not too small
+
+focus on what algorithm and model you use, and how and why we use them
+
+build or borrow dataset
+
+----------------------
+
+for the READme structure it should contain the following in order
+
+1. the objectives of the project
+2. proposed system, block diagram of the structure
+3. the dataset description 
+4. info on data preprocessing
+5. explaratory data analysis
+6. feature selection/ engineering
+7. ML methodology used
+8. algorithms used
+9. model training, validating and testing
+10. implementation
+11. model evaluation
+12. graphical represntation of results
+13. conclusion
