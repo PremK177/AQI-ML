@@ -158,7 +158,7 @@ To help machine learning models capture atmospheric physical processes without r
 ### 1. Particulate Fine-Fraction Ratio (`PM_Ratio`)
 
 $$
-\text{PM\_Ratio} = \frac{\text{PM}_{2.5}}{\text{PM}_{10}}
+\text{PM Ratio} = \frac{\text{PM}_{2.5}}{\text{PM}_{10}}
 $$
 
 - **Physical Meaning:** Differentiates between combustion-driven episodes (high fine-particulate fraction from vehicular exhaust and biomass burning, where ratio $> 0.6$) and windblown crustal dust storms (coarse fraction dominant, where ratio $< 0.4$).
@@ -166,7 +166,7 @@ $$
 ### 2. Dispersion / Ventilation Proxy (`Dispersion_Index`)
 
 $$
-\text{Dispersion\_Index} = \frac{\text{Wind\_Speed} + 1.0}{\text{PM}_{2.5} + 1.0}
+\text{Dispersion Index} = \frac{\text{Wind Speed} + 1.0}{\text{PM}_{2.5} + 1.0}
 $$
 
 - **Physical Meaning:** Represents the capacity of the atmospheric boundary layer to flush out particulate matter per unit mass concentration (ventilation capacity).
@@ -174,7 +174,7 @@ $$
 ### 3. Atmospheric Heat-Moisture Index (`Heat_Moisture_Index`)
 
 $$
-\text{Heat\_Moisture\_Index} = \frac{\text{Temperature} \times \text{Humidity}}{100}
+\text{Heat-Moisture Index} = \frac{\text{Temperature} \times \text{Humidity}}{100}
 $$
 
 - **Physical Meaning:** Captures air mass stagnation and vapor saturation conditions that foster secondary aerosol nucleation and photochemical reaction rates.
