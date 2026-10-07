@@ -302,8 +302,8 @@ The project is structured into modular Python packages with clean separation of 
 AQIPredict/
 │
 ├── README.md                             # Comprehensive project documentation (13 sections)
-├── Requirements.txt                       # College project prompt requirements
-├── python_requirements.txt               # Pip dependency file
+├── project_prompt.txt                    # College project prompt requirements
+├── requirements.txt                      # Pip dependency file (for local setup & Streamlit Cloud)
 ├── app.py                                # Streamlit Interactive Web Application
 │
 ├── data/
@@ -341,7 +341,7 @@ AQIPredict/
 
 1. **Install Dependencies:**
    ```bash
-   pip install -r python_requirements.txt
+   pip install -r requirements.txt
    ```
 
 2. **Generate the Dataset (Reproducible):**

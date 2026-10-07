@@ -92,15 +92,17 @@ HEALTH_ADVISORIES = {
     }
 }
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 @st.cache_resource
 def load_models():
-    scaler = joblib.load('models/aqi_scaler.pkl')
-    label_encoder = joblib.load('models/label_encoder.pkl')
-    regressor = joblib.load('models/aqi_regressor_rf.pkl')
-    classifier = joblib.load('models/aqi_classifier_rf.pkl')
-    with open('models/feature_names.json', 'r') as f:
+    scaler = joblib.load(os.path.join(BASE_DIR, 'models', 'aqi_scaler.pkl'))
+    label_encoder = joblib.load(os.path.join(BASE_DIR, 'models', 'label_encoder.pkl'))
+    regressor = joblib.load(os.path.join(BASE_DIR, 'models', 'aqi_regressor_rf.pkl'))
+    classifier = joblib.load(os.path.join(BASE_DIR, 'models', 'aqi_classifier_rf.pkl'))
+    with open(os.path.join(BASE_DIR, 'models', 'feature_names.json'), 'r') as f:
         feature_names = json.load(f)
-    with open('models/evaluation_metrics.json', 'r') as f:
+    with open(os.path.join(BASE_DIR, 'models', 'evaluation_metrics.json'), 'r') as f:
         metrics = json.load(f)
     return scaler, label_encoder, regressor, classifier, feature_names, metrics
 
@@ -233,9 +235,10 @@ with tabs[1]:
     ]
     
     for title, img_path in eda_plots:
-        if os.path.exists(img_path):
+        full_img_path = os.path.join(BASE_DIR, img_path)
+        if os.path.exists(full_img_path):
             st.subheader(title)
-            st.image(img_path, use_container_width=True)
+            st.image(full_img_path, use_container_width=True)
             st.markdown("---")
 
 # TAB 3: Model Performance & Comparison
@@ -263,9 +266,10 @@ with tabs[2]:
     ]
     
     for title, img_path in res_plots:
-        if os.path.exists(img_path):
+        full_img_path = os.path.join(BASE_DIR, img_path)
+        if os.path.exists(full_img_path):
             st.subheader(title)
-            st.image(img_path, use_container_width=True)
+            st.image(full_img_path, use_container_width=True)
             st.markdown("---")
 
 # TAB 4: Architecture & Dataset
@@ -284,7 +288,8 @@ with tabs[3]:
     7. **Deployment**: Saved artifacts, CLI inference, and interactive web dashboard.
     """)
     
-    if os.path.exists('data/air_quality_data_clean.csv'):
+    clean_csv_path = os.path.join(BASE_DIR, 'data', 'air_quality_data_clean.csv')
+    if os.path.exists(clean_csv_path):
         st.subheader("Cleaned Dataset Sample (First 20 records)")
-        sample_data = pd.read_csv('data/air_quality_data_clean.csv').head(20)
+        sample_data = pd.read_csv(clean_csv_path).head(20)
         st.dataframe(sample_data)
