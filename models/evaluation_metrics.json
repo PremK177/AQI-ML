@@ -1,52 +1,130 @@
 {
   "regression_metrics": {
     "Linear Regression": {
-      "CV_R2_Mean": 0.9474,
-      "CV_R2_Std": 0.0073,
-      "Train_MAE": 17.4135,
-      "Train_RMSE": 24.8242,
-      "Train_R2": 0.9491,
-      "Test_MAE": 18.3153,
-      "Test_RMSE": 26.1315,
-      "Test_R2": 0.9428
+      "CV_R2_Mean": 0.8342,
+      "CV_R2_Std": 0.1038,
+      "Train_MAE": 17.0724,
+      "Train_RMSE": 24.4189,
+      "Train_R2": 0.9488,
+      "Test_MAE": 20.5584,
+      "Test_RMSE": 27.7963,
+      "Test_R2": 0.9424
     },
     "Decision Tree": {
-      "CV_R2_Mean": 0.982,
-      "CV_R2_Std": 0.0025,
-      "Train_MAE": 6.1503,
-      "Train_RMSE": 9.2602,
-      "Train_R2": 0.9929,
-      "Test_MAE": 7.563,
-      "Test_RMSE": 13.3093,
-      "Test_R2": 0.9852
+      "CV_R2_Mean": 0.9303,
+      "CV_R2_Std": 0.0584,
+      "Train_MAE": 5.9134,
+      "Train_RMSE": 8.7052,
+      "Train_R2": 0.9935,
+      "Test_MAE": 7.99,
+      "Test_RMSE": 18.5865,
+      "Test_R2": 0.9742
     },
     "Random Forest": {
-      "CV_R2_Mean": 0.9904,
-      "CV_R2_Std": 0.0045,
-      "Train_MAE": 1.7957,
-      "Train_RMSE": 4.3908,
-      "Train_R2": 0.9984,
-      "Test_MAE": 3.4429,
-      "Test_RMSE": 11.5005,
-      "Test_R2": 0.9889
+      "CV_R2_Mean": 0.9673,
+      "CV_R2_Std": 0.031,
+      "Train_MAE": 1.6838,
+      "Train_RMSE": 4.1288,
+      "Train_R2": 0.9985,
+      "Test_MAE": 4.3735,
+      "Test_RMSE": 15.8656,
+      "Test_R2": 0.9812
     }
   },
   "classification_metrics": {
     "Logistic Regression": {
-      "CV_Accuracy_Mean": 0.8249,
-      "CV_Accuracy_Std": 0.0106,
-      "Test_Accuracy": 0.8322,
-      "Test_Precision_Weighted": 0.8348,
-      "Test_Recall_Weighted": 0.8322,
-      "Test_F1_Weighted": 0.8321
+      "CV_Accuracy_Mean": 0.7558,
+      "CV_Accuracy_Std": 0.0395,
+      "Test_Accuracy": 0.8904,
+      "Test_Precision_Weighted": 0.8914,
+      "Test_Recall_Weighted": 0.8904,
+      "Test_F1_Weighted": 0.8899,
+      "Test_F1_Macro": 0.8816,
+      "Per_Class": {
+        "Good": {
+          "Precision": 0.888,
+          "Recall": 0.888,
+          "F1": 0.888,
+          "Support": 125
+        },
+        "Moderate": {
+          "Precision": 0.9028,
+          "Recall": 0.9155,
+          "F1": 0.9091,
+          "Support": 142
+        },
+        "Poor": {
+          "Precision": 0.8958,
+          "Recall": 0.8113,
+          "F1": 0.8515,
+          "Support": 53
+        },
+        "Satisfactory": {
+          "Precision": 0.8614,
+          "Recall": 0.8827,
+          "F1": 0.872,
+          "Support": 162
+        },
+        "Severe": {
+          "Precision": 1.0,
+          "Recall": 0.7222,
+          "F1": 0.8387,
+          "Support": 18
+        },
+        "Very Poor": {
+          "Precision": 0.9091,
+          "Recall": 0.9524,
+          "F1": 0.9302,
+          "Support": 84
+        }
+      }
     },
     "Random Forest Classifier": {
-      "CV_Accuracy_Mean": 0.9465,
-      "CV_Accuracy_Std": 0.0072,
-      "Test_Accuracy": 0.9469,
-      "Test_Precision_Weighted": 0.9482,
-      "Test_Recall_Weighted": 0.9469,
-      "Test_F1_Weighted": 0.9467
+      "CV_Accuracy_Mean": 0.8917,
+      "CV_Accuracy_Std": 0.0648,
+      "Test_Accuracy": 0.9503,
+      "Test_Precision_Weighted": 0.9509,
+      "Test_Recall_Weighted": 0.9503,
+      "Test_F1_Weighted": 0.9503,
+      "Test_F1_Macro": 0.9413,
+      "Per_Class": {
+        "Good": {
+          "Precision": 0.9837,
+          "Recall": 0.968,
+          "F1": 0.9758,
+          "Support": 125
+        },
+        "Moderate": {
+          "Precision": 0.9306,
+          "Recall": 0.9437,
+          "F1": 0.9371,
+          "Support": 142
+        },
+        "Poor": {
+          "Precision": 0.9074,
+          "Recall": 0.9245,
+          "F1": 0.9159,
+          "Support": 53
+        },
+        "Satisfactory": {
+          "Precision": 0.9568,
+          "Recall": 0.9568,
+          "F1": 0.9568,
+          "Support": 162
+        },
+        "Severe": {
+          "Precision": 1.0,
+          "Recall": 0.8333,
+          "F1": 0.9091,
+          "Support": 18
+        },
+        "Very Poor": {
+          "Precision": 0.9419,
+          "Recall": 0.9643,
+          "F1": 0.9529,
+          "Support": 84
+        }
+      }
     }
   }
 }

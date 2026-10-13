@@ -15,27 +15,51 @@ import pandas as pd
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
-from sklearn.model_selection import cross_val_score, KFold, StratifiedKFold
+from sklearn.model_selection import cross_val_score
+from sklearn.pipeline import Pipeline
 from sklearn.metrics import (
     mean_absolute_error, mean_squared_error, r2_score,
-    accuracy_score, precision_score, recall_score, f1_score, classification_report, confusion_matrix
+    accuracy_score, precision_score, recall_score, f1_score, classification_report
 )
 
-from preprocess import load_and_inspect_raw_data, clean_data, engineer_features, prepare_and_split_data
+from preprocess import AQIPreprocessor, load_and_inspect_raw_data, clean_data, prepare_and_split_data
+
+
+def chronological_date_splits(X, n_splits=5):
+    """Expanding-window CV that keeps all stations from a date in the same fold."""
+    dates = pd.to_datetime(X['Date']).dt.normalize().reset_index(drop=True)
+    unique_dates = np.sort(dates.unique())
+    if len(unique_dates) <= n_splits:
+        raise ValueError(f'Need more than {n_splits} distinct training dates for CV')
+    blocks = np.array_split(unique_dates, n_splits + 1)
+    splits = []
+    for fold in range(1, n_splits + 1):
+        train_dates = np.concatenate(blocks[:fold])
+        valid_dates = blocks[fold]
+        train_idx = np.flatnonzero(dates.isin(train_dates).to_numpy())
+        valid_idx = np.flatnonzero(dates.isin(valid_dates).to_numpy())
+        if not len(train_idx) or not len(valid_idx):
+            raise ValueError(f'Empty chronological CV fold {fold}')
+        splits.append((train_idx, valid_idx))
+    return splits
+
+
+def make_pipeline(estimator):
+    return Pipeline([
+        ('preprocess', AQIPreprocessor()),
+        ('model', estimator)
+    ])
 
 def train_and_evaluate_all():
     print("=" * 60)
     print("STEP 1: PREPROCESSING & DATA SPLITTING")
     print("=" * 60)
     raw_df = load_and_inspect_raw_data('data/air_quality_data_raw.csv')
-    clean_df = clean_data(raw_df)
-    feat_df = engineer_features(clean_df)
-    data = prepare_and_split_data(feat_df, test_size=0.2, random_state=42)
+    clean_df = clean_data(raw_df, impute=False)
+    data = prepare_and_split_data(clean_df, test_size=0.2)
     
-    X_train_s = data['X_train_scaled']
-    X_test_s = data['X_test_scaled']
-    X_train_raw = data['X_train']
-    X_test_raw = data['X_test']
+    X_train = data['X_train']
+    X_test = data['X_test']
     
     y_train_reg = data['y_train_reg']
     y_test_reg = data['y_test_reg']
@@ -54,28 +78,29 @@ def train_and_evaluate_all():
     print("STEP 2: TRAINING REGRESSION MODELS")
     print("=" * 60)
     
-    reg_models = {
+    reg_estimators = {
         'Linear Regression': LinearRegression(),
         'Decision Tree': DecisionTreeRegressor(max_depth=6, min_samples_split=10, random_state=42),
         'Random Forest': RandomForestRegressor(n_estimators=100, max_depth=12, min_samples_split=5, random_state=42, n_jobs=-1)
     }
+    reg_models = {name: make_pipeline(model) for name, model in reg_estimators.items()}
     
     reg_results = {}
     reg_predictions = {}
-    kf = KFold(n_splits=5, shuffle=True, random_state=42)
+    cv_splits = chronological_date_splits(X_train, n_splits=5)
     
     for name, model in reg_models.items():
         print(f"\n--- Training {name} Regressor ---")
         # For tree models, scaled or unscaled yields identical trees, but scaled features keep inputs uniform
-        model.fit(X_train_s, y_train_reg)
+        model.fit(X_train, y_train_reg)
         
         # 5-fold cross-validation on training data to assess generalization
-        cv_scores = cross_val_score(model, X_train_s, y_train_reg, cv=kf, scoring='r2')
-        print(f"5-Fold CV R2 Score: {cv_scores.mean():.4f} (+/- {cv_scores.std():.4f})")
+        cv_scores = cross_val_score(model, X_train, y_train_reg, cv=cv_splits, scoring='r2')
+        print(f"5-Fold chronological CV R2 Score: {cv_scores.mean():.4f} (+/- {cv_scores.std():.4f})")
         
         # Predictions
-        y_train_pred = model.predict(X_train_s)
-        y_test_pred = model.predict(X_test_s)
+        y_train_pred = model.predict(X_train)
+        y_test_pred = model.predict(X_test)
         reg_predictions[name] = y_test_pred
         
         # Metrics
@@ -113,31 +138,44 @@ def train_and_evaluate_all():
     print("STEP 3: TRAINING CLASSIFICATION MODELS")
     print("=" * 60)
     
-    clf_models = {
+    clf_estimators = {
         'Logistic Regression': LogisticRegression(max_iter=1000, random_state=42),
         'Random Forest Classifier': RandomForestClassifier(n_estimators=100, max_depth=12, min_samples_split=5, random_state=42, n_jobs=-1)
     }
+    clf_models = {name: make_pipeline(model) for name, model in clf_estimators.items()}
     
     clf_results = {}
     clf_predictions = {}
-    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-    
     for name, model in clf_models.items():
         print(f"\n--- Training {name} ---")
-        model.fit(X_train_s, y_train_clf)
+        model.fit(X_train, y_train_clf)
         
         # 5-fold cross-validation
-        cv_scores = cross_val_score(model, X_train_s, y_train_clf, cv=skf, scoring='accuracy')
-        print(f"5-Fold CV Accuracy: {cv_scores.mean():.4f} (+/- {cv_scores.std():.4f})")
+        cv_scores = cross_val_score(model, X_train, y_train_clf, cv=cv_splits, scoring='accuracy')
+        print(f"5-Fold chronological CV Accuracy: {cv_scores.mean():.4f} (+/- {cv_scores.std():.4f})")
         
-        y_train_pred = model.predict(X_train_s)
-        y_test_pred = model.predict(X_test_s)
+        y_train_pred = model.predict(X_train)
+        y_test_pred = model.predict(X_test)
         clf_predictions[name] = y_test_pred
         
         test_acc = accuracy_score(y_test_clf, y_test_pred)
         test_precision = precision_score(y_test_clf, y_test_pred, average='weighted', zero_division=0)
         test_recall = recall_score(y_test_clf, y_test_pred, average='weighted', zero_division=0)
         test_f1 = f1_score(y_test_clf, y_test_pred, average='weighted', zero_division=0)
+        test_f1_macro = f1_score(y_test_clf, y_test_pred, average='macro', zero_division=0)
+        class_report = classification_report(
+            y_test_clf, y_test_pred, labels=np.arange(len(classes)), target_names=classes,
+            output_dict=True, zero_division=0
+        )
+        per_class = {
+            class_name: {
+                'Precision': float(round(class_report[class_name]['precision'], 4)),
+                'Recall': float(round(class_report[class_name]['recall'], 4)),
+                'F1': float(round(class_report[class_name]['f1-score'], 4)),
+                'Support': int(class_report[class_name]['support'])
+            }
+            for class_name in classes
+        }
         
         clf_results[name] = {
             'CV_Accuracy_Mean': float(round(cv_scores.mean(), 4)),
@@ -145,12 +183,19 @@ def train_and_evaluate_all():
             'Test_Accuracy': float(round(test_acc, 4)),
             'Test_Precision_Weighted': float(round(test_precision, 4)),
             'Test_Recall_Weighted': float(round(test_recall, 4)),
-            'Test_F1_Weighted': float(round(test_f1, 4))
+            'Test_F1_Weighted': float(round(test_f1, 4)),
+            'Test_F1_Macro': float(round(test_f1_macro, 4)),
+            'Per_Class': per_class
         }
         
-        print(f"Test Accuracy: {test_acc:.4f} | Weighted Precision: {test_precision:.4f} | Weighted Recall: {test_recall:.4f} | Weighted F1: {test_f1:.4f}")
+        print(f"Test Accuracy: {test_acc:.4f} | Weighted F1: {test_f1:.4f} | Macro F1: {test_f1_macro:.4f}")
         
     joblib.dump(clf_models['Random Forest Classifier'], 'models/aqi_classifier_rf.pkl')
+
+    # Save the feature names emitted by the fitted preprocessing pipeline.
+    feature_names = reg_models['Random Forest'].named_steps['preprocess'].get_feature_names_out().tolist()
+    with open('models/feature_names.json', 'w') as f:
+        json.dump(feature_names, f, indent=2)
     
     # Save evaluation summary to JSON
     summary = {
@@ -161,7 +206,7 @@ def train_and_evaluate_all():
         json.dump(summary, f, indent=2)
         
     # Save predictions and test data for plotting
-    test_data_export = X_test_raw.copy()
+    test_data_export = X_test.copy()
     test_data_export['Actual_AQI'] = y_test_reg.values
     test_data_export['Actual_Category'] = label_encoder.inverse_transform(y_test_clf)
     for model_name, preds in reg_predictions.items():

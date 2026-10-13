@@ -1,15 +1,19 @@
 """
-Command-Line Inference Module for AQI Prediction
+Command-Line Scenario Estimation Module for AQI
 Takes pollutant and meteorological readings, performs feature engineering,
 and outputs predicted continuous AQI value, AQI Category, and health advisory.
 """
 
 import sys
-import json
+import os
 import joblib
-import numpy as np
 import pandas as pd
-import datetime
+
+# Ensure the custom preprocessing transformer can be imported when saved
+# sklearn pipelines are loaded from the project root or from this module.
+SRC_DIR = os.path.dirname(os.path.abspath(__file__))
+if SRC_DIR not in sys.path:
+    sys.path.insert(0, SRC_DIR)
 
 # Health Advisories mapped to AQI categories
 HEALTH_ADVISORIES = {
@@ -47,53 +51,22 @@ HEALTH_ADVISORIES = {
 
 class AQIPredictor:
     def __init__(self, models_dir='models'):
-        self.scaler = joblib.load(f'{models_dir}/aqi_scaler.pkl')
         self.label_encoder = joblib.load(f'{models_dir}/label_encoder.pkl')
         self.regressor = joblib.load(f'{models_dir}/aqi_regressor_rf.pkl')
         self.classifier = joblib.load(f'{models_dir}/aqi_classifier_rf.pkl')
-        with open(f'{models_dir}/feature_names.json', 'r') as f:
-            self.feature_names = json.load(f)
 
     def prepare_input(self, input_dict):
-        """Converts raw input dictionary into transformed, scaled feature vector."""
-        df = pd.DataFrame([input_dict])
-        
-        # Parse date components
-        date = pd.to_datetime(df['Date'].iloc[0])
-        df['Month'] = date.month
-        df['DayOfWeek'] = date.dayofweek
-        df['Is_Weekend'] = 1 if date.dayofweek >= 5 else 0
-        
-        # Domain feature engineering
-        df['PM_Ratio'] = np.clip(df['PM2.5'] / (df['PM10'] + 1e-5), 0.05, 0.95)
-        df['Dispersion_Index'] = (df['Wind_Speed'] + 1.0) / (df['PM2.5'] + 1.0)
-        df['Heat_Moisture_Index'] = (df['Temperature'] * df['Humidity']) / 100.0
-        
-        # One-Hot Encoding alignment for Station and Season
-        for col in self.feature_names:
-            if col not in df.columns:
-                if col.startswith('Station_'):
-                    station_val = col.replace('Station_', '')
-                    df[col] = 1 if df['Station'].iloc[0] == station_val else 0
-                elif col.startswith('Season_'):
-                    season_val = col.replace('Season_', '')
-                    df[col] = 1 if df['Season'].iloc[0] == season_val else 0
-                else:
-                    df[col] = 0.0
-
-        # Filter and order exactly as during training
-        X = df[self.feature_names].copy()
-        X_scaled = pd.DataFrame(self.scaler.transform(X), columns=self.feature_names)
-        return X_scaled
+        """Return raw inputs; the saved model pipeline handles transformations."""
+        return pd.DataFrame([input_dict])
 
     def predict(self, input_dict):
-        X_scaled = self.prepare_input(input_dict)
-        pred_aqi = float(self.regressor.predict(X_scaled)[0])
-        pred_cat_idx = self.classifier.predict(X_scaled)[0]
+        X = self.prepare_input(input_dict)
+        pred_aqi = float(self.regressor.predict(X)[0])
+        pred_cat_idx = self.classifier.predict(X)[0]
         pred_cat = self.label_encoder.inverse_transform([pred_cat_idx])[0]
         
         # Predict class probabilities
-        probs = self.classifier.predict_proba(X_scaled)[0]
+        probs = self.classifier.predict_proba(X)[0]
         prob_dict = {cls: round(float(prob), 3) for cls, prob in zip(self.label_encoder.classes_, probs)}
         
         advisory = HEALTH_ADVISORIES.get(pred_cat, {})
@@ -166,13 +139,14 @@ def run_sample_predictions():
     print("=" * 70)
     print("AIR QUALITY INDEX PREDICTION INFERENCE SAMPLES")
     print("=" * 70)
+    print("Note: models use synthetic data; advisory text is illustrative, not official.")
     
     for item in samples:
         print(f"\n>>> {item['name']}")
         print(f"Inputs: PM2.5={item['data']['PM2.5']}, PM10={item['data']['PM10']}, Wind={item['data']['Wind_Speed']} km/h, Temp={item['data']['Temperature']} C")
         res = predictor.predict(item['data'])
         print(f"-> Predicted AQI Value:    {res['predicted_aqi']} (Continuous Regression)")
-        print(f"-> Predicted Category:     {res['predicted_category']} (Confidence: {res['confidence_score']}%)")
+        print(f"-> Predicted Category:     {res['predicted_category']} (Top class probability, not calibrated: {res['confidence_score']}%)")
         print(f"-> Category Health Impact: {res['advisory'].get('Impact')}")
         print(f"-> Recommended Action:     {res['advisory'].get('Recommendation')}")
 

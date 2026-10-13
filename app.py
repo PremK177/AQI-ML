@@ -9,6 +9,7 @@ import json
 import joblib
 import numpy as np
 import pandas as pd
+import sys
 import streamlit as st
 
 # Configure page layout
@@ -93,21 +94,21 @@ HEALTH_ADVISORIES = {
 }
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SRC_DIR = os.path.join(BASE_DIR, 'src')
+if SRC_DIR not in sys.path:
+    sys.path.insert(0, SRC_DIR)
 
 @st.cache_resource
 def load_models():
-    scaler = joblib.load(os.path.join(BASE_DIR, 'models', 'aqi_scaler.pkl'))
     label_encoder = joblib.load(os.path.join(BASE_DIR, 'models', 'label_encoder.pkl'))
     regressor = joblib.load(os.path.join(BASE_DIR, 'models', 'aqi_regressor_rf.pkl'))
     classifier = joblib.load(os.path.join(BASE_DIR, 'models', 'aqi_classifier_rf.pkl'))
-    with open(os.path.join(BASE_DIR, 'models', 'feature_names.json'), 'r') as f:
-        feature_names = json.load(f)
     with open(os.path.join(BASE_DIR, 'models', 'evaluation_metrics.json'), 'r') as f:
         metrics = json.load(f)
-    return scaler, label_encoder, regressor, classifier, feature_names, metrics
+    return label_encoder, regressor, classifier, metrics
 
 try:
-    scaler, label_encoder, regressor, classifier, feature_names, metrics = load_models()
+    label_encoder, regressor, classifier, metrics = load_models()
     models_loaded = True
 except Exception as e:
     st.error(f"Error loading models: {e}. Please ensure train_models.py has executed.")
@@ -139,12 +140,12 @@ wind_speed = st.sidebar.slider("Wind Speed (km/h)", min_value=1.5, max_value=32.
 st.markdown('<div class="main-header">Air Quality Index (AQI) Prediction & Analysis</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">Machine Learning Mini-Project | Comparative Modeling of Atmospheric Pollutants</div>', unsafe_allow_html=True)
 
-tabs = st.tabs(["🎯 Live Prediction & Health Advisory", "📊 Exploratory Data Analysis", "📈 Model Benchmarks & Results", "🏗️ System Architecture & Data"])
+tabs = st.tabs(["🎯 AQI Scenario Estimate", "📊 Exploratory Data Analysis", "📈 Model Benchmarks & Results", "🏗️ System Architecture & Data"])
 
-# TAB 1: Live Prediction
+# TAB 1: AQI Scenario Estimate
 with tabs[0]:
     if models_loaded:
-        # Preprocess single sample
+        # Pipelines handle imputation, feature engineering, encoding, and scaling.
         input_dict = {
             'Date': str(date_input),
             'Station': station,
@@ -160,32 +161,11 @@ with tabs[0]:
             'Wind_Speed': wind_speed
         }
         
-        df_single = pd.DataFrame([input_dict])
-        date_parsed = pd.to_datetime(df_single['Date'].iloc[0])
-        df_single['Month'] = date_parsed.month
-        df_single['DayOfWeek'] = date_parsed.dayofweek
-        df_single['Is_Weekend'] = 1 if date_parsed.dayofweek >= 5 else 0
-        
-        df_single['PM_Ratio'] = np.clip(pm25 / (pm10 + 1e-5), 0.05, 0.95)
-        df_single['Dispersion_Index'] = (wind_speed + 1.0) / (pm25 + 1.0)
-        df_single['Heat_Moisture_Index'] = (temp * humidity) / 100.0
-        
-        for col in feature_names:
-            if col not in df_single.columns:
-                if col.startswith('Station_'):
-                    df_single[col] = 1 if station == col.replace('Station_', '') else 0
-                elif col.startswith('Season_'):
-                    df_single[col] = 1 if season == col.replace('Season_', '') else 0
-                else:
-                    df_single[col] = 0.0
-                    
-        X_in = df_single[feature_names].copy()
-        X_scaled = scaler.transform(X_in)
-        
-        pred_aqi = float(regressor.predict(X_scaled)[0])
-        pred_cat_idx = classifier.predict(X_scaled)[0]
+        X_in = pd.DataFrame([input_dict])
+        pred_aqi = float(regressor.predict(X_in)[0])
+        pred_cat_idx = classifier.predict(X_in)[0]
         pred_cat = label_encoder.inverse_transform([pred_cat_idx])[0]
-        cat_probs = classifier.predict_proba(X_scaled)[0]
+        cat_probs = classifier.predict_proba(X_in)[0]
         
         col1, col2, col3 = st.columns([1.2, 1.2, 1.6])
         
@@ -199,7 +179,7 @@ with tabs[0]:
             color = CATEGORY_COLORS.get(pred_cat, '#333333')
             st.markdown(f'<div class="category-badge" style="background-color: {color}; color: white;">{pred_cat}</div>', unsafe_allow_html=True)
             max_p = np.max(cat_probs) * 100
-            st.caption(f"Confidence: {max_p:.1f}% (Random Forest Classifier)")
+            st.caption(f"Top class probability: {max_p:.1f}% (not calibrated)")
             
         with col3:
             st.markdown("### 🩺 Health Advisory & Impact")
@@ -215,11 +195,7 @@ with tabs[0]:
         st.bar_chart(prob_df.set_index('Category'))
         
         st.markdown("---")
-        st.subheader("🧬 Computed Domain Features")
-        fcol1, fcol2, fcol3 = st.columns(3)
-        fcol1.metric("PM2.5 / PM10 Fine Ratio", f"{df_single['PM_Ratio'].iloc[0]:.2f}", help="Indicates the proportion of fine combustion aerosols vs coarse dust.")
-        fcol2.metric("Dispersion Ventilation Proxy", f"{df_single['Dispersion_Index'].iloc[0]:.3f}", help="Ratio of wind speed to particulate mass.")
-        fcol3.metric("Heat-Moisture Index", f"{df_single['Heat_Moisture_Index'].iloc[0]:.1f}", help="Interaction index between ambient temperature and relative humidity.")
+        st.caption("Scenario estimate from models trained on synthetic data. It is not a measured AQI, future forecast, or verified public-health advisory.")
 
 # TAB 2: Exploratory Data Analysis
 with tabs[1]:
@@ -253,7 +229,10 @@ with tabs[2]:
         
         st.subheader("2. Classification Task Evaluation (AQI Health Category)")
         clf_df = pd.DataFrame(metrics['classification_metrics']).T
-        st.dataframe(clf_df[['Test_Accuracy', 'Test_F1_Weighted', 'Test_Precision_Weighted', 'Test_Recall_Weighted', 'CV_Accuracy_Mean']].style.highlight_max(subset=['Test_Accuracy', 'Test_F1_Weighted'], color='#dcfce7'))
+        st.dataframe(clf_df[['Test_Accuracy', 'Test_F1_Weighted', 'Test_F1_Macro', 'Test_Precision_Weighted', 'Test_Recall_Weighted', 'CV_Accuracy_Mean']].style.highlight_max(subset=['Test_Accuracy', 'Test_F1_Weighted', 'Test_F1_Macro'], color='#dcfce7'))
+        rf_per_class = metrics['classification_metrics']['Random Forest Classifier']['Per_Class']
+        st.caption("Random Forest per-class scores (reveals performance on less common AQI categories)")
+        st.dataframe(pd.DataFrame(rf_per_class).T.rename_axis('AQI category'))
         
     st.markdown("---")
     res_plots = [
@@ -278,13 +257,13 @@ with tabs[3]:
     st.markdown("""
     ### Machine Learning Pipeline Flow
     1. **Data Ingestion**: Multi-station historical sensor monitoring (PM2.5, PM10, NO2, SO2, CO, O3, Temp, Humidity, Wind).
-    2. **Data Preprocessing**: Deduplication, station-season stratified median imputation, and temporal parsing.
+    2. **Data Preprocessing**: Deduplication; train-fold station-season median imputation; feature engineering, encoding, and scaling inside each model pipeline.
     3. **Domain Feature Engineering**: Fine-fraction ratio ($PM_{2.5}/PM_{10}$), Ventilation proxy, Heat-moisture index.
-    4. **Data Splitting**: 80/20 train-test split strictly executed before scaling to prevent leakage.
+    4. **Data Splitting**: Chronological 80/20 train-test split; the latest dates form the test period.
     5. **Model Benchmarking**: 
        - Regression: Linear Regression, Decision Tree, Random Forest Regressor.
        - Classification: Logistic Regression, Random Forest Classifier.
-    6. **Validation**: 5-Fold Cross Validation.
+    6. **Validation**: Five expanding-window folds grouped by date; preprocessing is refit within every fold.
     7. **Deployment**: Saved artifacts, CLI inference, and interactive web dashboard.
     """)
     

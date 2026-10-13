@@ -3,9 +3,11 @@
 
 ---
 
+> **Important:** The included observations are synthetically generated. AQI is calculated from the same pollutant inputs supplied to the models, so benchmark scores measure how well models recover the generator's rules; they do not establish accuracy on real monitors. The interface estimates an AQI scenario from supplied readings and is not a future forecast or a verified health advisory.
+
 ## 1. The Objectives of the Project
 
-Air pollution is one of the most pressing environmental and public health hazards in modern urban regions. The primary goal of this college mini-project is to build an end-to-end Machine Learning pipeline to analyze atmospheric criteria pollutants, understand their interactions with meteorological factors, and accurately predict the **Air Quality Index (AQI)**.
+Air pollution is an important environmental and public health concern. The primary goal of this college mini-project is to build an end-to-end machine-learning pipeline that analyzes atmospheric criteria pollutants and estimates the **Air Quality Index (AQI)** from supplied measurements.
 
 Rather than treating Machine Learning as a "black box," this project focuses on **showing how we arrived at the solution, how data was cleaned and transformed, why specific algorithms were selected, and how the models compare against one another**.
 
@@ -13,10 +15,10 @@ Rather than treating Machine Learning as a "black box," this project focuses on 
 1. **Dual Formulation Modeling:**
    - **Regression Task:** Predict the exact continuous numerical AQI value ($0 - 500+$) using criteria pollutant concentrations and meteorological parameters.
    - **Classification Task:** Classify air quality into standardized health hazard categories (*Good, Satisfactory, Moderate, Poor, Very Poor, Severe*) to trigger actionable health advisories.
-2. **Robust Data Preprocessing:** Implement domain-aware data cleaning (deduplication, station-season stratified median imputation) and enforce strict featurization ordering (splitting before scaling) to eliminate data leakage.
+2. **Robust Data Preprocessing:** Remove duplicates and fit station-season median imputation, feature engineering, encoding, and scaling only on each training fold.
 3. **Domain Feature Engineering:** Derive physically motivated atmospheric indicators, including the fine-particulate ratio ($PM_{2.5} / PM_{10}$), atmospheric ventilation/dispersion proxy, and heat-moisture interaction index.
 4. **Algorithmic Benchmarking:** Systematically evaluate parametric baselines (Linear Regression, Logistic Regression) against non-linear tree models (Decision Tree) and bagged ensembles (Random Forest) through 5-Fold Cross-Validation and held-out test evaluation.
-5. **Interactive Deployment:** Deliver a command-line inference tool and a full-featured Streamlit web dashboard for live stakeholder exploration.
+5. **Interactive Deployment:** Provide command-line inference and a Streamlit dashboard for scenario estimates and model analysis.
 
 ---
 
@@ -34,14 +36,13 @@ flowchart TD
 
     subgraph S2["2. Data Preprocessing & Cleaning"]
         B --> C["Deduplication<br/>(Remove duplicate sensor logs)"]
-        C --> D["Stratified Median Imputation<br/>(Grouped by Station & Season)"]
-        D --> E["Cleaned Base Dataset<br/>(data/air_quality_data_clean.csv)"]
+        C --> D["Parse dates, sort rows, and drop missing targets<br/>(retain missing predictors for fold-local imputation)"]
+        D --> E["Eligible records for modeling"]
     end
 
     subgraph S3["3. Feature Engineering & Strict Splitting"]
-        E --> F["Domain Feature Engineering<br/>(PM_Ratio, Dispersion_Index, Heat_Moisture_Index, Calendar)"]
-        F --> G["80/20 Train-Test Split<br/>(Stratified by AQI Category)"]
-        G --> H["StandardScaler Fit on Train Split ONLY<br/>(Prevents Data Leakage)"]
+        E --> G["Chronological 80/20 Train-Test Split<br/>(Latest dates held out)"]
+        G --> H["Each fold fits grouped imputation, feature engineering,<br/>encoding, and scaling on earlier dates only"]
     end
 
     subgraph S4["4. Dual Model Training & 5-Fold CV"]
@@ -65,13 +66,13 @@ flowchart TD
 
 ## 3. The Dataset Description
 
-The dataset simulates a multi-station air quality monitoring network across four distinct urban monitoring sectors (`Station_North`, `Station_South`, `Station_East`, `Station_West`) over a 2-year observation horizon (2,920 records), reflecting real-world atmospheric chemistry dynamics and seasonal cycles.
+The synthetic dataset generator creates daily records for four named stations (`Station_North`, `Station_South`, `Station_East`, `Station_West`) across two years (2,920 generated observations). The values are illustrative and should not be treated as observations from real monitoring sectors.
 
 ### Feature Specification:
 
 | Feature Name | Data Type | Units / Range | Category | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `Date` | Datetime | 2023-01-01 to 2024-12-31 | Temporal | Date of daily observation |
+| `Date` | Datetime | 2023-01-01 to 2024-12-30 | Temporal | Date of generated daily observation |
 | `Station` | Categorical | North, South, East, West | Metadata | Geographical monitoring station |
 | `Season` | Categorical | Winter, Summer, Monsoon, Post-Monsoon | Atmospheric | Meteorological season |
 | `PM2.5` | Continuous | $5.0 - 450.0\ \mu g/m^3$ | Criteria Pollutant | Fine particulate matter ($< 2.5\ \mu m$) from combustion |
@@ -98,28 +99,27 @@ The dataset simulates a multi-station air quality monitoring network across four
 
 ## 4. Info on Data Preprocessing
 
-Data preprocessing was engineered to reflect real-world monitoring station challenges while strictly adhering to machine learning best practices:
+Data preprocessing removes duplicate records and keeps predictor values missing until a model pipeline is fitted. This lets each validation fold learn its own imputation and scaling values instead of borrowing statistics from its validation period.
 
 ### 1. Duplicate Detection and Removal
 Environmental telemetry logs occasionally submit re-transmitted network packets. The raw ingestion pipeline identified and eliminated 15 exact duplicate records ($2,935 \to 2,920$ clean records).
 
-### 2. Missing Value Imputation (Domain-Aware Median Imputation)
+### 2. Missing Value Imputation (Fold-Fitted Grouped Median)
 Missing values accounted for approximately $2.0\% - 2.9\%$ of entries per column due to simulated sensor downtime, power interruptions, or maintenance cycles.
-- **Why NOT Global Mean Imputation?** Global mean imputation distorts seasonal extremes (e.g., diluting winter smog spikes with summer/monsoon clean baselines).
-- **Our Strategy:** We implemented **grouped median imputation conditioned on `Station` and `Season`**. This preserves local microclimates (e.g., an industrial station in winter retains high particulate medians, whereas a coastal station in monsoon maintains clean baseline medians).
+- **Strategy:** `AQIPreprocessor` learns each sensor's median by `Station` and `Season` from the current training fold, with a training-fold global median as fallback. The same learned medians transform that fold's validation data. After cross-validation, the final model pipeline is refitted on the full training period and applied to the later test period.
 
 ```python
-# Imputation preserving station and seasonal microclimate baselines
-for col in numerical_cols:
-    medians = df.groupby(['Station', 'Season'])[col].transform('median')
-    df[col] = df[col].fillna(medians)
-    df[col] = df[col].fillna(df[col].median())
+# Conceptual flow inside each cloned model pipeline
+imputer.fit(training_fold)
+X_train_ready = imputer.transform(training_fold)
+X_valid_ready = imputer.transform(validation_fold)
 ```
 
-### 3. Strict Featurization Ordering (No Data Leakage)
-A common beginner error is scaling the entire dataset before splitting. To prevent test information from leaking into the training pipeline:
-- The dataset was first split into **$80\%$ Training ($2,336$ samples)** and **$20\%$ Testing ($584$ samples)**.
-- `StandardScaler` was fitted **strictly on `X_train`**, and then used to transform both `X_train` and `X_test`.
+### 3. Chronological Split and Fold-Safe Transformations
+- The final **80% of dates for training** and **latest 20% for testing** are separated chronologically. The current generated dataset yields 2,336 training rows and 584 test rows; the test period begins on 2024-08-07.
+- Validation uses expanding chronological windows grouped by date, so all stations on one date stay together.
+- Imputation, calendar/domain feature creation, one-hot encoding, and `StandardScaler` live inside an sklearn pipeline. Each cross-validation fold fits them only on its own earlier training dates. The holdout test period is not used to fit these transformations.
+- The test period comes from the same synthetic generator. This is a more realistic time split than a random split, but independent real-monitor validation is still needed.
 
 ---
 
@@ -196,22 +196,23 @@ $$
 
 ### Problem Formulation:
 We structured the prediction problem into two complementary branches:
-1. **Continuous Regression ($y \in \mathbb{R}^+$):** Evaluates how close the predicted AQI number is to ground-truth index measurements.
+1. **Continuous Regression ($y \in \mathbb{R}^+$):** Evaluates how close the estimated AQI number is to the synthetic label.
 2. **Multi-Class Classification ($y \in \{0, 1, 2, 3, 4, 5\}$):** Evaluates whether the model assigns the correct health advisory tier, even across non-linear category boundaries.
 
 ### Validation Strategy:
-- **Held-Out Test Split:** An independent $20\%$ test set ($N=584$) held out exclusively for final model benchmarking.
-- **5-Fold Cross-Validation:** The $80\%$ training set was partitioned into 5 folds ($K$-Fold for regression, Stratified $K$-Fold for classification). Models are trained on 4 folds and validated on the remaining fold across 5 iterations to assess out-of-fold generalization stability ($\mu \pm \sigma$).
+- **Held-Out Test Period:** The latest $20\%$ of dates ($N=584$ rows) is reserved for final benchmarking.
+- **5-Fold Expanding-Window Cross-Validation:** The training period is divided into five later validation windows. Each model trains on earlier dates and validates on the next window; all stations for a date remain in the same fold. The complete preprocessing pipeline is refit inside every fold.
 
 ### Evaluation Metric Selection:
 - **Regression:**
   - **Mean Absolute Error (MAE):** Linear penalty; represents average error in AQI points.
-  - **Root Mean Squared Error (RMSE):** Quadratic penalty; penalizes large forecasting mistakes heavily (crucial for detecting sudden hazardous spikes).
+  - **Root Mean Squared Error (RMSE):** Quadratic penalty; gives larger AQI estimation errors more weight.
   - **Coefficient of Determination ($R^2$):** Proportion of variance in AQI explained by the features.
 - **Classification:**
   - **Accuracy:** Overall proportion of correct category assignments.
   - **Weighted Precision & Recall:** Handles minor class imbalances across severity tiers.
-  - **Weighted F1-Score:** Harmonic mean of precision and recall.
+  - **Weighted and Macro F1:** Weighted F1 emphasizes common classes; macro F1 gives each AQI category equal weight.
+  - **Per-Class Precision, Recall, F1 and Support:** Shows performance for rare categories such as Severe.
   - **Confusion Matrix:** Inspects misclassification patterns between adjacent categories.
 
 ---
@@ -264,7 +265,7 @@ $$
 P(Y = k \mid X) = \frac{e^{\beta_k^T X}}{\sum_{j=1}^{K} e^{\beta_j^T X}}
 $$
 
-- **Why We Used It:** Standard linear classification benchmark that outputs calibrated class probabilities.
+- **Why We Used It:** Standard linear classification benchmark that outputs class probability estimates; those estimates are not guaranteed to be calibrated.
 
 #### 2. Random Forest Classifier (Multi-Class Ensemble)
 - **Mathematical Form:** Ensemble of classification trees voting on category membership, splitting nodes based on the Gini Impurity metric:
@@ -279,18 +280,18 @@ $$
 
 ## 9. Model Training, Validating and Testing
 
-All models were trained on the preprocessed training set ($N=2,336$), validated using 5-Fold Cross-Validation, and evaluated on the held-out test set ($N=584$).
+All models were trained on the earlier training period ($N=2,336$), validated using five expanding-window date folds, and evaluated on the later held-out period ($N=584$, beginning 2024-08-07). The included data remains synthetic, so these results are an internal benchmark rather than evidence of field accuracy.
 
 ### Execution Summary:
-- **Feature Scaling:** All features normalized to $\mu = 0, \sigma = 1$ via `StandardScaler`.
+- **Preprocessing:** Grouped imputation, feature engineering, encoding, and scaling are fit within each pipeline fold and refit on the full training period before test evaluation.
 - **Cross-Validation Results:**
-  - Linear Regression 5-Fold $R^2$: $0.9474 \pm 0.0073$
-  - Decision Tree 5-Fold $R^2$: $0.9820 \pm 0.0025$
-  - Random Forest 5-Fold $R^2$: $\mathbf{0.9904 \pm 0.0045}$
-  - Logistic Regression 5-Fold Accuracy: $82.49\% \pm 1.06\%$
-  - Random Forest Classifier 5-Fold Accuracy: $\mathbf{94.65\% \pm 0.72\%}$
+  - Linear Regression chronological 5-fold $R^2$: $0.8342 \pm 0.1038$
+  - Decision Tree chronological 5-fold $R^2$: $0.9303 \pm 0.0584$
+  - Random Forest chronological 5-fold $R^2$: $\mathbf{0.9673 \pm 0.0310}$
+  - Logistic Regression chronological 5-fold accuracy: $75.58\% \pm 3.95\%$
+  - Random Forest Classifier chronological 5-fold accuracy: $\mathbf{89.17\% \pm 6.48\%}$
 
-The low variance across all 5 cross-validation folds confirms that the models generalize consistently and are not overfitting to an arbitrary split.
+The larger fold-to-fold spread is informative: later time windows can be harder than earlier ones. It should not be summarized as uniformly stable performance.
 
 ---
 
@@ -313,19 +314,19 @@ AQIPredict/
 │   └── test_predictions.csv              # Test set actuals vs. model predictions
 │
 ├── src/
-│   ├── preprocess.py                     # Deduplication, imputation, feature engineering, scaling
+│   ├── preprocess.py                     # Deduplication, temporal split, fold-fitted preprocessing transformer
 │   ├── eda.py                            # Summary statistics and EDA visualizer
-│   ├── train_models.py                   # 5-fold CV, regression & classification model training
+│   ├── train_models.py                   # Date-grouped CV, regression & classification metrics
 │   ├── visualize_results.py              # Performance plots, residuals, confusion matrices
 │   └── predict.py                        # Standalone CLI inference engine with health advisory
 │
 ├── models/
-│   ├── aqi_scaler.pkl                    # Fitted StandardScaler
+│   ├── aqi_scaler.pkl                    # Legacy standalone scaler; new pipelines bundle preprocessing
 │   ├── label_encoder.pkl                 # Target LabelEncoder for AQI categories
 │   ├── aqi_regressor_lr.pkl              # Trained Linear Regression model
 │   ├── aqi_regressor_dt.pkl              # Trained Decision Tree Regressor
-│   ├── aqi_regressor_rf.pkl              # Trained Random Forest Regressor (Best Regressor)
-│   ├── aqi_classifier_rf.pkl             # Trained Random Forest Classifier (Best Classifier)
+│   ├── aqi_regressor_rf.pkl              # Random Forest pipeline with preprocessing and estimator
+│   ├── aqi_classifier_rf.pkl             # Random Forest classification pipeline
 │   ├── feature_names.json                # Feature names specification for schema validation
 │   └── evaluation_metrics.json           # Serialized numerical evaluation metrics
 │
@@ -385,29 +386,39 @@ AQIPredict/
 
 ### 1. Regression Models Benchmark (Target: Continuous `AQI`)
 
-| Model | 5-Fold CV $R^2$ ($\mu \pm \sigma$) | Train $R^2$ | Test $R^2$ | Test RMSE | Test MAE | Performance Ranking |
+| Model | Chronological CV $R^2$ ($\mu \pm \sigma$) | Train $R^2$ | Later-Period Test $R^2$ | Test RMSE | Test MAE | Performance Ranking |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Linear Regression** | $0.9474 \pm 0.0073$ | $0.9491$ | $0.9428$ | $26.13$ | $18.32$ | Baseline |
-| **Decision Tree Regressor** | $0.9820 \pm 0.0025$ | $0.9929$ | $0.9852$ | $13.31$ | $7.56$ | Strong Non-Linear |
-| **Random Forest Regressor** | $\mathbf{0.9904 \pm 0.0045}$ | $\mathbf{0.9984}$ | $\mathbf{0.9889}$ | $\mathbf{11.50}$ | $\mathbf{3.44}$ | **Best Model (Winner)** |
+| **Linear Regression** | $0.8342 \pm 0.1038$ | $0.9488$ | $0.9424$ | $27.80$ | $20.56$ | Baseline |
+| **Decision Tree Regressor** | $0.9303 \pm 0.0584$ | $0.9935$ | $0.9742$ | $18.59$ | $7.99$ | Strong Non-Linear |
+| **Random Forest Regressor** | $\mathbf{0.9673 \pm 0.0310}$ | $\mathbf{0.9985}$ | $\mathbf{0.9812}$ | $\mathbf{15.87}$ | $\mathbf{4.37}$ | **Best Model in this benchmark** |
 
 #### Key Regression Observations:
-- **Why Random Forest Won:** Random Forest achieved an outstanding **$R^2$ of $0.9889$** and a **Test MAE of just $3.44$ AQI points**, representing an $81.2\%$ reduction in MAE compared to Linear Regression ($18.32 \to 3.44$).
-- **Linear Regression Shortcoming:** Linear Regression failed to capture the non-linear piecewise slopes of the breakpoint calculation, resulting in an RMSE of $26.13$.
-- **Decision Tree Pruning:** The Decision Tree showed marked improvement ($R^2 = 0.9852$) due to threshold splitting, but exhibited minor variance compared to the averaged ensemble.
+- **Random Forest:** It leads this later-period synthetic benchmark with $R^2=0.9812$ and MAE $=4.37$ AQI points. These scores are not real-monitor accuracy claims because AQI labels are generated from the predictor pollutants.
+- **Linear Regression:** Its MAE is $20.56$ and RMSE is $27.80$, consistent with a linear baseline struggling to represent the generator's nonlinear thresholds.
+- **Time variation:** Chronological CV has more fold-to-fold variation than random CV; this is expected to reveal time-window shifts and should be reported rather than hidden.
 
 ---
 
 ### 2. Classification Models Benchmark (Target: `AQI_Bucket`)
 
-| Model | 5-Fold CV Accuracy | Test Accuracy | Weighted Precision | Weighted Recall | Weighted F1-Score |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| **Logistic Regression** | $82.49\% \pm 1.06\%$ | $83.22\%$ | $0.8348$ | $0.8322$ | $0.8321$ |
-| **Random Forest Classifier** | $\mathbf{94.65\% \pm 0.72\%}$ | $\mathbf{94.69\%}$ | $\mathbf{0.9482}$ | $\mathbf{0.9469}$ | $\mathbf{0.9467}$ |
+| Model | Chronological CV Accuracy | Test Accuracy | Weighted F1 | Macro F1 |
+| :--- | :---: | :---: | :---: | :---: |
+| **Logistic Regression** | $75.58\% \pm 3.95\%$ | $89.04\%$ | $0.8899$ | $0.8816$ |
+| **Random Forest Classifier** | $\mathbf{89.17\% \pm 6.48\%}$ | $\mathbf{95.03\%}$ | $\mathbf{0.9503}$ | $\mathbf{0.9413}$ |
 
 #### Key Classification Observations:
-- Random Forest Classifier achieved **$94.69\%$ test accuracy** and a **$0.9467$ weighted F1-score**, correctly identifying health categories across all bands.
-- Logistic Regression struggled with boundary classification (accuracy $83.22\%$) because the transition from *Moderate* to *Poor* is driven by multi-pollutant non-linear interaction thresholds rather than a hyper-plane separator.
+- Random Forest Classifier achieved **$95.03\%$ later-period test accuracy**, with weighted F1 $0.9503$ and macro F1 $0.9413$.
+- Per-class scores matter because test support is imbalanced. Random Forest's *Severe* recall is $0.8333$ on 18 examples; the score is less certain than the larger classes' results.
+- The later test period is still generated by the same simulator, so improved time splitting does not replace evaluation on independent CPCB or local sensor observations.
+
+| AQI category | Precision | Recall | F1 | Test support |
+| :--- | :---: | :---: | :---: | :---: |
+| Good | 0.9837 | 0.9680 | 0.9758 | 125 |
+| Moderate | 0.9306 | 0.9437 | 0.9371 | 142 |
+| Poor | 0.9074 | 0.9245 | 0.9159 | 53 |
+| Satisfactory | 0.9568 | 0.9568 | 0.9568 | 162 |
+| Severe | 1.0000 | 0.8333 | 0.9091 | 18 |
+| Very Poor | 0.9419 | 0.9643 | 0.9529 | 84 |
 
 ---
 
@@ -422,49 +433,47 @@ High-resolution visual representations of the evaluation results were automatica
 ### 2. Residual Error Analysis & Homoscedasticity Check
 - **File:** `plots/results/residual_analysis.png`
 - **Analysis:**
-  - **Residual Histogram:** Centered at zero ($\mu_{\text{res}} \approx -0.05$) with a sharp Gaussian distribution, proving unbiased predictions.
-  - **Residuals vs. Predicted Plot:** Scatter points are evenly distributed around the horizontal zero line without funnel shapes, confirming satisfactory homoscedasticity.
+  - **Residual Histogram:** Shows the distribution of later-period AQI errors around zero; inspect asymmetry and long tails for systematic or unusually large errors.
+  - **Residuals vs. Predicted Plot:** Helps reveal prediction ranges where errors become larger or systematically biased. These plots do not by themselves prove unbiasedness or constant variance.
 
 ### 3. Regression Model Performance Comparison
 - **File:** `plots/results/regression_model_comparison.png`
-- **Analysis:** Side-by-side bar chart showing $R^2$ improvements ($0.9428 \to 0.9852 \to 0.9889$) and RMSE reductions ($26.13 \to 13.31 \to 11.50$) across the models.
+- **Analysis:** Side-by-side comparison of later-period $R^2$ ($0.9424 \to 0.9742 \to 0.9812$) and RMSE ($27.80 \to 18.59 \to 15.87$) across the models.
 
 ### 4. Multi-Class Confusion Matrix Heatmap
 - **File:** `plots/results/confusion_matrix_classifier.png`
-- **Analysis:** The confusion matrix displays high diagonal concentration ($>92-96\%$ per class). Confusions occur only between immediately adjacent tiers (e.g., *Moderate* vs *Satisfactory* at the boundary threshold of 100), with zero cross-tier confusion between *Good* and *Severe*.
+- **Analysis:** The confusion matrix shows correct and mistaken classifications for each category on the later-date test set; inspect it alongside per-class precision, recall, F1, and support.
 
 ### 5. Classification Performance Comparison
 - **File:** `plots/results/classification_model_comparison.png`
-- **Analysis:** Direct bar chart comparison highlighting Random Forest's $+11.5\%$ accuracy advantage over Logistic Regression.
+- **Analysis:** Direct bar chart comparison of accuracy and weighted F1 for both classifiers on the later-date test set.
 
 ### 6. Feature Importance Ranking
 - **File:** `plots/results/feature_importance_ranking.png`
-- **Analysis:** Gini importance rankings from Random Forest identify:
-  1. **PM2.5:** Top predictor ($\sim 45-50\%$ relative importance).
-  2. **PM10:** Second dominant predictor ($\sim 25-30\%$).
-  3. **Engineered Dispersion Index:** Third most influential feature ($\sim 8\%$).
-  4. **NO2 & CO:** Moderate contribution reflecting traffic combustion.
+- **Analysis:** Impurity-based regression-forest importance ranks PM2.5 first (about 84.4%) and PM10 second (about 14.0%). In the classifier, PM10 (about 26.7%), PM2.5 (22.4%), and Dispersion_Index (13.4%) lead. These are split-importance scores, not causal effects; particulate dominance is expected because the generator uses pollutant sub-indices to create AQI.
 
 ---
 
 ## 13. Conclusion
 
-This project successfully engineered and validated an end-to-end Machine Learning pipeline for Air Quality Index (AQI) prediction and analysis, addressing both continuous numerical forecasting and discrete public health categorization.
+This project implements an end-to-end machine-learning pipeline for AQI scenario estimation and category classification. It uses synthetic data, so the results demonstrate the workflow rather than validate an operational air-quality service.
 
 ### Key Conclusions:
 1. **How We Arrived at the Solution:**
    - Started from atmospheric physics and environmental standards (CPCB/EPA sub-index breakpoints).
-   - Modeled the real-world problem from both a continuous regression angle and a multi-class categorization angle.
+   - Modeled the estimation task with both numeric regression and six-category classification.
 2. **How Data Was Used & Cleaned:**
-   - Instead of simplistic mean filling, station-by-season stratified median imputation was used to preserve local microclimates and seasonal swings.
-   - Enforcing strict featurization ordering (splitting before scaling) ensured that test sets provided an uncompromised evaluation benchmark with zero data leakage.
-   - Domain feature engineering (such as $PM_{2.5}/PM_{10}$ ratio and ventilation index) provided physical context that bolstered tree split quality.
+   - Station-season medians, feature engineering, one-hot encoding, and scaling are fit inside each cross-validation pipeline, then refit on training dates before test evaluation.
+   - A chronological holdout uses the latest dates for testing, and expanding folds keep station records from the same date together.
+   - Domain feature engineering (such as $PM_{2.5}/PM_{10}$ ratio and ventilation index) provides additional input signals.
 3. **Why Specific Algorithms Succeeded:**
-   - **Linear models** provided a fast, interpretable starting point ($R^2 \approx 0.9428$, Accuracy $\approx 83.22\%$) but fell short of modeling piecewise non-linear breakpoint curves.
-   - **Decision Trees** improved performance ($R^2 \approx 0.9852$) by splitting at pollutant threshold levels.
-   - **Random Forest** achieved superior performance (**$R^2 = 0.9889$, Test MAE $= 3.44$, Test Accuracy $= 94.69\%$**) because bagging effectively eliminates single-tree variance and aggregates non-linear interactions across criteria pollutants.
+   - **Linear models** provide fast baselines but lag behind tree ensembles on this generated rule set.
+   - **Random Forest** leads the time-based synthetic benchmark (test $R^2=0.9812$, MAE $=4.37$; classification accuracy $=95.03\%$, macro F1 $=0.9413$).
+   - Per-class reporting shows Random Forest Severe recall of $0.8333$ on 18 test examples, which overall accuracy alone would obscure.
 4. **Practical Application:**
-   - The trained models were deployed both as a lightweight CLI inference script and as an interactive Streamlit web dashboard providing instant predictions, confidence metrics, and public health recommendations.
+   - The CLI and Streamlit app accept supplied readings and return scenario estimates. Their outputs are not future forecasts or verified health advisories.
+5. **Next Validation Step:**
+   - Replace or supplement the generated data with independent real-monitor observations before making claims about field performance.
 
 ---
 *Developed for College Mini-Project (Machine Learning Minor).*

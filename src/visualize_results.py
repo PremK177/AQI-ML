@@ -10,6 +10,7 @@ Generates high-resolution graphical representations of model performance:
 """
 
 import os
+import sys
 import json
 import joblib
 import numpy as np
@@ -33,18 +34,21 @@ plt.rcParams.update({
 
 def generate_result_visualizations(output_dir='plots/results'):
     os.makedirs(output_dir, exist_ok=True)
+    src_dir = os.path.dirname(os.path.abspath(__file__))
+    if src_dir not in sys.path:
+        sys.path.insert(0, src_dir)
     
     # Load test predictions and metrics
     test_df = pd.read_csv('data/test_predictions.csv')
     with open('models/evaluation_metrics.json', 'r') as f:
         metrics = json.load(f)
         
-    with open('models/feature_names.json', 'r') as f:
-        feature_names = json.load(f)
-        
     rf_reg = joblib.load('models/aqi_regressor_rf.pkl')
     rf_clf = joblib.load('models/aqi_classifier_rf.pkl')
     label_encoder = joblib.load('models/label_encoder.pkl')
+    feature_names = rf_reg.named_steps['preprocess'].get_feature_names_out()
+    rf_reg_estimator = rf_reg.named_steps['model']
+    rf_clf_estimator = rf_clf.named_steps['model']
     
     print("=" * 60)
     print("GENERATING GRAPHICAL REPRESENTATIONS OF RESULTS")
@@ -202,7 +206,7 @@ def generate_result_visualizations(output_dir='plots/results'):
     fig, axes = plt.subplots(1, 2, figsize=(16, 7))
     
     # Regressor feature importance
-    reg_importances = pd.Series(rf_reg.feature_importances_, index=feature_names).sort_values(ascending=True)
+    reg_importances = pd.Series(rf_reg_estimator.feature_importances_, index=feature_names).sort_values(ascending=True)
     # Top 10 features
     top_reg = reg_importances.tail(10)
     top_reg.plot(kind='barh', ax=axes[0], color='#2980b9', edgecolor='black', alpha=0.85)
@@ -212,7 +216,7 @@ def generate_result_visualizations(output_dir='plots/results'):
         axes[0].text(v + 0.005, i, f'{v:.3f}', va='center', fontweight='bold', fontsize=9)
         
     # Classifier feature importance
-    clf_importances = pd.Series(rf_clf.feature_importances_, index=feature_names).sort_values(ascending=True)
+    clf_importances = pd.Series(rf_clf_estimator.feature_importances_, index=feature_names).sort_values(ascending=True)
     top_clf = clf_importances.tail(10)
     top_clf.plot(kind='barh', ax=axes[1], color='#27ae60', edgecolor='black', alpha=0.85)
     axes[1].set_title('Top 10 Feature Importances (Random Forest Classifier)', fontweight='bold')
