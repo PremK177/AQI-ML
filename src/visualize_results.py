@@ -33,6 +33,7 @@ plt.rcParams.update({
 })
 
 def generate_result_visualizations(output_dir='plots/results'):
+    output_dir = os.path.abspath(output_dir)
     os.makedirs(output_dir, exist_ok=True)
     src_dir = os.path.dirname(os.path.abspath(__file__))
     if src_dir not in sys.path:
@@ -65,6 +66,9 @@ def generate_result_visualizations(output_dir='plots/results'):
     ]
     
     actual = test_df['Actual_AQI']
+    # Keep the comparison readable while making the zoom explicit: the source
+    # file includes extreme AQI labels (up to 2049), and all rows still count
+    # toward the metrics above.
     min_val, max_val = 0, 520
     
     for ax, (name, col, color) in zip(axes, reg_models):
@@ -83,7 +87,10 @@ def generate_result_visualizations(output_dir='plots/results'):
         ax.set_ylim(min_val, max_val)
         ax.legend(loc='upper left')
         
-    plt.suptitle('Actual vs Predicted AQI across Regression Models on Test Set', fontsize=15, y=1.02)
+    plt.suptitle(
+        'Actual vs Predicted AQI on Test Set (axes zoomed to 0–520; metrics use all rows)',
+        fontsize=15, y=1.02
+    )
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, 'actual_vs_predicted_regression.png'), bbox_inches='tight')
     plt.close()
@@ -131,7 +138,7 @@ def generate_result_visualizations(output_dir='plots/results'):
     b1 = axes[0].bar(models_list, r2_scores, color=colors, edgecolor='black', alpha=0.85)
     axes[0].set_title('Test $R^2$ Score (Higher is Better)', fontweight='bold')
     axes[0].set_ylabel('$R^2$ Score')
-    axes[0].set_ylim(0.85, 1.02)
+    axes[0].set_ylim(0, 1.02)
     for bar in b1:
         height = bar.get_height()
         axes[0].text(bar.get_x() + bar.get_width()/2., height + 0.005, f'{height:.4f}', ha='center', va='bottom', fontweight='bold')
@@ -174,25 +181,28 @@ def generate_result_visualizations(output_dir='plots/results'):
     # -----------------------------------------------------------------
     # 5. CLASSIFICATION METRICS COMPARISON (Bar Chart)
     # -----------------------------------------------------------------
-    plt.figure(figsize=(8, 5))
+    plt.figure(figsize=(9, 5))
     clf_names = list(metrics['classification_metrics'].keys())
     accuracies = [metrics['classification_metrics'][m]['Test_Accuracy'] * 100 for m in clf_names]
     f1_scores = [metrics['classification_metrics'][m]['Test_F1_Weighted'] * 100 for m in clf_names]
+    macro_f1_scores = [metrics['classification_metrics'][m]['Test_F1_Macro'] * 100 for m in clf_names]
     
     x = np.arange(len(clf_names))
-    width = 0.35
+    width = 0.25
     
-    plt.bar(x - width/2, accuracies, width, label='Accuracy (%)', color='#3498db', edgecolor='black', alpha=0.85)
-    plt.bar(x + width/2, f1_scores, width, label='Weighted F1 (%)', color='#2ecc71', edgecolor='black', alpha=0.85)
+    plt.bar(x - width, accuracies, width, label='Accuracy (%)', color='#3498db', edgecolor='black', alpha=0.85)
+    plt.bar(x, f1_scores, width, label='Weighted F1 (%)', color='#2ecc71', edgecolor='black', alpha=0.85)
+    plt.bar(x + width, macro_f1_scores, width, label='Macro F1 (%)', color='#e67e22', edgecolor='black', alpha=0.85)
     
     plt.ylabel('Score (%)', fontweight='bold')
     plt.title('Classification Performance: Logistic Regression vs Random Forest', fontsize=14, pad=15)
     plt.xticks(x, clf_names, fontweight='bold')
-    plt.ylim(65, 105)
+    plt.ylim(0, 100)
     
     for i in range(len(clf_names)):
-        plt.text(x[i] - width/2, accuracies[i] + 1, f'{accuracies[i]:.1f}%', ha='center', fontweight='bold')
-        plt.text(x[i] + width/2, f1_scores[i] + 1, f'{f1_scores[i]:.1f}%', ha='center', fontweight='bold')
+        plt.text(x[i] - width, accuracies[i] + 1, f'{accuracies[i]:.1f}%', ha='center', fontsize=8, fontweight='bold')
+        plt.text(x[i], f1_scores[i] + 1, f'{f1_scores[i]:.1f}%', ha='center', fontsize=8, fontweight='bold')
+        plt.text(x[i] + width, macro_f1_scores[i] + 1, f'{macro_f1_scores[i]:.1f}%', ha='center', fontsize=8, fontweight='bold')
         
     plt.legend(loc='lower right')
     plt.tight_layout()

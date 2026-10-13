@@ -19,7 +19,8 @@ from sklearn.model_selection import cross_val_score
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import (
     mean_absolute_error, mean_squared_error, r2_score,
-    accuracy_score, precision_score, recall_score, f1_score, classification_report
+    accuracy_score, precision_score, recall_score, f1_score, classification_report,
+    make_scorer
 )
 
 from preprocess import AQIPreprocessor, load_and_inspect_raw_data, clean_data, prepare_and_split_data
@@ -54,8 +55,9 @@ def train_and_evaluate_all():
     print("=" * 60)
     print("STEP 1: PREPROCESSING & DATA SPLITTING")
     print("=" * 60)
-    raw_df = load_and_inspect_raw_data('data/air_quality_data_raw.csv')
+    raw_df = load_and_inspect_raw_data('data/city_day.csv')
     clean_df = clean_data(raw_df, impute=False)
+    clean_df.to_csv('data/air_quality_data_clean.csv', index=False)
     data = prepare_and_split_data(clean_df, test_size=0.2)
     
     X_train = data['X_train']
@@ -140,7 +142,7 @@ def train_and_evaluate_all():
     
     clf_estimators = {
         'Logistic Regression': LogisticRegression(max_iter=1000, random_state=42),
-        'Random Forest Classifier': RandomForestClassifier(n_estimators=100, max_depth=12, min_samples_split=5, random_state=42, n_jobs=-1)
+        'Random Forest Classifier': RandomForestClassifier(n_estimators=100, max_depth=12, min_samples_split=5, class_weight='balanced', random_state=42, n_jobs=-1)
     }
     clf_models = {name: make_pipeline(model) for name, model in clf_estimators.items()}
     
@@ -153,6 +155,11 @@ def train_and_evaluate_all():
         # 5-fold cross-validation
         cv_scores = cross_val_score(model, X_train, y_train_clf, cv=cv_splits, scoring='accuracy')
         print(f"5-Fold chronological CV Accuracy: {cv_scores.mean():.4f} (+/- {cv_scores.std():.4f})")
+        cv_macro_scores = cross_val_score(
+            model, X_train, y_train_clf, cv=cv_splits,
+            scoring=make_scorer(f1_score, average='macro', zero_division=0)
+        )
+        print(f"5-Fold chronological CV Macro F1: {cv_macro_scores.mean():.4f} (+/- {cv_macro_scores.std():.4f})")
         
         y_train_pred = model.predict(X_train)
         y_test_pred = model.predict(X_test)
@@ -180,6 +187,8 @@ def train_and_evaluate_all():
         clf_results[name] = {
             'CV_Accuracy_Mean': float(round(cv_scores.mean(), 4)),
             'CV_Accuracy_Std': float(round(cv_scores.std(), 4)),
+            'CV_F1_Macro_Mean': float(round(cv_macro_scores.mean(), 4)),
+            'CV_F1_Macro_Std': float(round(cv_macro_scores.std(), 4)),
             'Test_Accuracy': float(round(test_acc, 4)),
             'Test_Precision_Weighted': float(round(test_precision, 4)),
             'Test_Recall_Weighted': float(round(test_recall, 4)),

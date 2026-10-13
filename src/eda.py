@@ -1,143 +1,98 @@
-"""
-Exploratory Data Analysis (EDA) Module
-Computes summary statistics and generates publication-grade visualizations
-for air quality metrics, meteorological factors, seasonal variations, and AQI relationships.
-"""
+"""EDA for the supplied India city-day air quality observations."""
 
 import os
 import matplotlib
-matplotlib.use('Agg')  # Non-interactive backend for server/script plotting
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import numpy as np
 
-# Set aesthetic styling
+from preprocess import POLLUTANT_COLUMNS
+
 sns.set_theme(style='whitegrid', palette='muted')
-plt.rcParams.update({
-    'font.size': 11,
-    'axes.labelsize': 12,
-    'axes.titlesize': 13,
-    'xtick.labelsize': 10,
-    'ytick.labelsize': 10,
-    'figure.titlesize': 14,
-    'figure.dpi': 300
-})
+plt.rcParams.update({'font.size': 10, 'figure.dpi': 180})
+
 
 def perform_eda(clean_data_path='data/air_quality_data_clean.csv', output_dir='plots/eda'):
-    """Performs statistical EDA and produces all visual plots."""
     os.makedirs(output_dir, exist_ok=True)
-    df = pd.read_csv(clean_data_path)
-    df['Date'] = pd.to_datetime(df['Date'])
-    
-    print("=" * 60)
-    print("EXPLORATORY DATA ANALYSIS (EDA)")
-    print("=" * 60)
-    
-    # 1. Summary Statistics
-    numerical_cols = ['PM2.5', 'PM10', 'NO2', 'SO2', 'CO', 'O3', 'Temperature', 'Humidity', 'Wind_Speed', 'AQI']
+    df = pd.read_csv(clean_data_path, parse_dates=['Date'])
+    pollutants = [c for c in POLLUTANT_COLUMNS if c in df]
+
+    print('=' * 60)
+    print('EXPLORATORY DATA ANALYSIS — CITY-DAY DATA')
+    print('=' * 60)
+    print(f'Labeled observations: {len(df):,}; cities: {df.City.nunique()}; dates: {df.Date.min().date()} to {df.Date.max().date()}')
+    missing = (100 * df[pollutants].isna().mean()).round(2).rename('Missing_Percent')
+    missing.to_csv(os.path.join(output_dir, 'pollutant_missingness.csv'))
+
+    numerical_cols = pollutants + ['AQI']
     stats = df[numerical_cols].describe().T[['mean', 'std', 'min', '25%', '50%', '75%', 'max']]
     stats['skewness'] = df[numerical_cols].skew()
-    print("\nDescriptive Statistics & Skewness:")
-    print(stats.to_string())
+    stats['missing_percent'] = (100 * df[numerical_cols].isna().mean())
     stats.to_csv(os.path.join(output_dir, 'summary_statistics.csv'))
-    
-    # 2. Pollutant Distributions Plot
-    fig, axes = plt.subplots(2, 3, figsize=(15, 9))
-    pollutants = ['PM2.5', 'PM10', 'NO2', 'SO2', 'CO', 'O3']
-    colors = ['#e74c3c', '#e67e22', '#f39c12', '#27ae60', '#2980b9', '#8e44ad']
-    
-    for ax, col, color in zip(axes.flatten(), pollutants, colors):
-        sns.histplot(df[col], kde=True, ax=ax, color=color, bins=30, alpha=0.6)
-        ax.set_title(f'Distribution of {col}', fontweight='bold')
-        ax.set_xlabel(col)
-        ax.set_ylabel('Frequency')
-        median_val = df[col].median()
-        ax.axvline(median_val, color='black', linestyle='--', linewidth=1.2, label=f'Median: {median_val:.1f}')
-        ax.legend()
-        
-    plt.suptitle('Distribution of Criteria Air Pollutants with KDE', fontsize=16, y=1.02)
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, 'pollutant_distributions.png'), bbox_inches='tight')
-    plt.close()
-    print(f"Saved: {os.path.join(output_dir, 'pollutant_distributions.png')}")
-    
-    # 3. Correlation Heatmap
-    plt.figure(figsize=(10, 8))
-    corr = df[numerical_cols].corr(method='pearson')
-    mask = np.triu(np.ones_like(corr, dtype=bool))
-    sns.heatmap(
-        corr, mask=mask, annot=True, fmt='.2f', cmap='coolwarm',
-        vmin=-1, vmax=1, square=True, linewidths=0.5, cbar_kws={'shrink': 0.8}
-    )
-    plt.title('Correlation Matrix of Atmospheric Variables and AQI', fontsize=14, pad=15)
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, 'correlation_heatmap.png'), bbox_inches='tight')
-    plt.close()
-    print(f"Saved: {os.path.join(output_dir, 'correlation_heatmap.png')}")
-    
-    # 4. Seasonal Variation of AQI (Boxplot + Strip plot)
-    plt.figure(figsize=(10, 6))
-    season_order = ['Winter', 'Summer', 'Monsoon', 'Post-Monsoon']
-    palette = {'Winter': '#34495e', 'Summer': '#e67e22', 'Monsoon': '#3498db', 'Post-Monsoon': '#9b59b6'}
-    sns.boxplot(x='Season', y='AQI', data=df, order=season_order, palette=palette, boxprops=dict(alpha=0.8), showmeans=True,
-                meanprops={"marker":"o", "markerfacecolor":"red", "markeredgecolor":"black", "markersize":"8"})
-    plt.title('Seasonal Distribution of Air Quality Index (AQI)', fontsize=14, pad=15)
-    plt.xlabel('Season', fontweight='bold')
-    plt.ylabel('AQI Value', fontweight='bold')
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, 'seasonal_aqi_distribution.png'), bbox_inches='tight')
-    plt.close()
-    print(f"Saved: {os.path.join(output_dir, 'seasonal_aqi_distribution.png')}")
-    
-    # 5. AQI Category Class Distribution
-    plt.figure(figsize=(9, 5))
-    bucket_order = ['Good', 'Satisfactory', 'Moderate', 'Poor', 'Very Poor', 'Severe']
-    bucket_colors = ['#2ecc71', '#a8e063', '#f1c40f', '#e67e22', '#e74c3c', '#8e44ad']
-    counts = df['AQI_Bucket'].value_counts().reindex(bucket_order).fillna(0)
-    
-    bars = plt.bar(counts.index, counts.values, color=bucket_colors, edgecolor='black', alpha=0.85)
-    for bar in bars:
-        height = bar.get_height()
-        pct = (height / len(df)) * 100
-        plt.text(bar.get_x() + bar.get_width()/2., height + 15, f'{int(height)}\n({pct:.1f}%)',
-                 ha='center', va='bottom', fontsize=9, fontweight='bold')
-        
-    plt.title('Frequency Distribution of AQI Health Categories', fontsize=14, pad=15)
-    plt.xlabel('AQI Category', fontweight='bold')
-    plt.ylabel('Observation Count', fontweight='bold')
-    plt.ylim(0, max(counts.values) * 1.15)
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, 'aqi_category_distribution.png'), bbox_inches='tight')
-    plt.close()
-    print(f"Saved: {os.path.join(output_dir, 'aqi_category_distribution.png')}")
-    
-    # 6. Scatter plots: Pollutant vs AQI relationships
-    fig, axes = plt.subplots(2, 2, figsize=(14, 11))
-    
-    # PM2.5 vs AQI
-    sns.regplot(data=df, x='PM2.5', y='AQI', ax=axes[0, 0], scatter_kws={'alpha': 0.4, 'color': '#e74c3c', 's': 15}, line_kws={'color': 'darkred', 'linewidth': 2})
-    axes[0, 0].set_title('PM2.5 vs AQI (Primary Driver)', fontweight='bold')
-    
-    # PM10 vs AQI
-    sns.regplot(data=df, x='PM10', y='AQI', ax=axes[0, 1], scatter_kws={'alpha': 0.4, 'color': '#e67e22', 's': 15}, line_kws={'color': 'darkorange', 'linewidth': 2})
-    axes[0, 1].set_title('PM10 vs AQI', fontweight='bold')
-    
-    # Wind Speed vs AQI (Atmospheric Dispersion Effect)
-    sns.regplot(data=df, x='Wind_Speed', y='AQI', ax=axes[1, 0], scatter_kws={'alpha': 0.4, 'color': '#2980b9', 's': 15}, line_kws={'color': 'darkblue', 'linewidth': 2})
-    axes[1, 0].set_title('Wind Speed vs AQI (Dispersion Ventilation)', fontweight='bold')
-    
-    # Temperature vs Ozone (Photochemical Production)
-    sns.regplot(data=df, x='Temperature', y='O3', ax=axes[1, 1], scatter_kws={'alpha': 0.4, 'color': '#8e44ad', 's': 15}, line_kws={'color': 'purple', 'linewidth': 2})
-    axes[1, 1].set_title('Temperature vs Ozone (Photochemical Reaction)', fontweight='bold')
-    
-    plt.suptitle('Key Atmospheric Driver Relationships', fontsize=16, y=1.01)
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, 'pollutant_aqi_relationships.png'), bbox_inches='tight')
-    plt.close()
-    print(f"Saved: {os.path.join(output_dir, 'pollutant_aqi_relationships.png')}")
-    
-    print("\nEDA completed successfully! All plots and statistics generated.")
+    print('\nSummary statistics:')
+    print(stats.round(2).to_string())
+
+    hist_cols = [c for c in ['PM2.5', 'PM10', 'NO2', 'SO2', 'CO', 'O3'] if c in df]
+    fig, axes = plt.subplots(2, 3, figsize=(14, 8))
+    for ax, col in zip(axes.flat, hist_cols):
+        sns.histplot(df[col].dropna(), ax=ax, bins=35, color='#3688b7')
+        ax.set_title(f'{col} distribution')
+        ax.set_xlabel(f'{col} concentration (dataset units)')
+        ax.set_ylabel('Daily observations')
+    fig.suptitle('Pollutant distributions (missing values omitted)', y=1.02)
+    fig.tight_layout()
+    fig.savefig(os.path.join(output_dir, 'pollutant_distributions.png'), bbox_inches='tight')
+    plt.close(fig)
+
+    corr_cols = [c for c in pollutants + ['AQI'] if c in df]
+    corr = df[corr_cols].corr(method='pearson')
+    corr.to_csv(os.path.join(output_dir, 'correlation_matrix.csv'))
+    fig, ax = plt.subplots(figsize=(11, 9))
+    sns.heatmap(corr, mask=np.triu(np.ones_like(corr, dtype=bool)), annot=True,
+                fmt='.2f', cmap='coolwarm', vmin=-1, vmax=1, square=True, ax=ax)
+    ax.set_title('Pollutant and AQI correlation matrix (pairwise complete rows)')
+    fig.tight_layout()
+    fig.savefig(os.path.join(output_dir, 'correlation_heatmap.png'), bbox_inches='tight')
+    plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    sns.boxplot(data=df, x='Season', y='AQI', order=['Winter', 'Summer', 'Monsoon', 'Post-Monsoon'],
+                showfliers=False, ax=ax, color='#83b8d1')
+    ax.set_title('Observed AQI by calendar-derived season')
+    ax.set_ylabel('AQI')
+    fig.tight_layout()
+    fig.savefig(os.path.join(output_dir, 'seasonal_aqi_distribution.png'), bbox_inches='tight')
+    plt.close(fig)
+
+    counts = df['AQI_Bucket'].value_counts().reindex(
+        ['Good', 'Satisfactory', 'Moderate', 'Poor', 'Very Poor', 'Severe'], fill_value=0)
+    fig, ax = plt.subplots(figsize=(9, 5))
+    bars = ax.bar(counts.index, counts.values, color=['#43a66b', '#91bd55', '#e3c642', '#e28e35', '#cf584d', '#78508d'])
+    ax.bar_label(bars, fmt='%d', padding=3)
+    ax.set_title('AQI category counts among labeled observations')
+    ax.set_ylabel('Daily observations')
+    ax.tick_params(axis='x', rotation=15)
+    fig.tight_layout()
+    fig.savefig(os.path.join(output_dir, 'aqi_category_distribution.png'), bbox_inches='tight')
+    plt.close(fig)
+
+    scatter_cols = [c for c in ['PM2.5', 'PM10', 'NO2', 'O3'] if c in df]
+    fig, axes = plt.subplots(2, 2, figsize=(12, 9))
+    for ax, col in zip(axes.flat, scatter_cols):
+        sample = df[[col, 'AQI']].dropna()
+        if len(sample) > 5000:
+            sample = sample.sample(5000, random_state=42)
+        sns.regplot(data=sample, x=col, y='AQI', lowess=False,
+                    scatter_kws={'alpha': 0.18, 's': 10}, line_kws={'color': '#bb4430'}, ax=ax)
+        ax.set_title(f'{col} versus observed AQI')
+    fig.tight_layout()
+    fig.savefig(os.path.join(output_dir, 'pollutant_aqi_relationships.png'), bbox_inches='tight')
+    plt.close(fig)
+
+    print(f'EDA outputs saved under {output_dir}')
+
 
 if __name__ == '__main__':
     perform_eda()

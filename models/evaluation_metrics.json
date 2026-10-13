@@ -1,128 +1,132 @@
 {
   "regression_metrics": {
     "Linear Regression": {
-      "CV_R2_Mean": 0.8342,
-      "CV_R2_Std": 0.1038,
-      "Train_MAE": 17.0724,
-      "Train_RMSE": 24.4189,
-      "Train_R2": 0.9488,
-      "Test_MAE": 20.5584,
-      "Test_RMSE": 27.7963,
-      "Test_R2": 0.9424
+      "CV_R2_Mean": 0.7657,
+      "CV_R2_Std": 0.0501,
+      "Train_MAE": 34.2262,
+      "Train_RMSE": 60.0149,
+      "Train_R2": 0.8456,
+      "Test_MAE": 32.5456,
+      "Test_RMSE": 45.6064,
+      "Test_R2": 0.8075
     },
     "Decision Tree": {
-      "CV_R2_Mean": 0.9303,
-      "CV_R2_Std": 0.0584,
-      "Train_MAE": 5.9134,
-      "Train_RMSE": 8.7052,
-      "Train_R2": 0.9935,
-      "Test_MAE": 7.99,
-      "Test_RMSE": 18.5865,
-      "Test_R2": 0.9742
+      "CV_R2_Mean": 0.7446,
+      "CV_R2_Std": 0.079,
+      "Train_MAE": 30.5332,
+      "Train_RMSE": 49.8717,
+      "Train_R2": 0.8934,
+      "Test_MAE": 22.3428,
+      "Test_RMSE": 38.0781,
+      "Test_R2": 0.8658
     },
     "Random Forest": {
-      "CV_R2_Mean": 0.9673,
-      "CV_R2_Std": 0.031,
-      "Train_MAE": 1.6838,
-      "Train_RMSE": 4.1288,
-      "Train_R2": 0.9985,
-      "Test_MAE": 4.3735,
-      "Test_RMSE": 15.8656,
-      "Test_R2": 0.9812
+      "CV_R2_Mean": 0.8196,
+      "CV_R2_Std": 0.0394,
+      "Train_MAE": 18.6015,
+      "Train_RMSE": 30.7005,
+      "Train_R2": 0.9596,
+      "Test_MAE": 17.683,
+      "Test_RMSE": 32.0268,
+      "Test_R2": 0.9051
     }
   },
   "classification_metrics": {
     "Logistic Regression": {
-      "CV_Accuracy_Mean": 0.7558,
-      "CV_Accuracy_Std": 0.0395,
-      "Test_Accuracy": 0.8904,
-      "Test_Precision_Weighted": 0.8914,
-      "Test_Recall_Weighted": 0.8904,
-      "Test_F1_Weighted": 0.8899,
-      "Test_F1_Macro": 0.8816,
+      "CV_Accuracy_Mean": 0.6474,
+      "CV_Accuracy_Std": 0.0476,
+      "CV_F1_Macro_Mean": 0.5454,
+      "CV_F1_Macro_Std": 0.0291,
+      "Test_Accuracy": 0.7285,
+      "Test_Precision_Weighted": 0.7186,
+      "Test_Recall_Weighted": 0.7285,
+      "Test_F1_Weighted": 0.7132,
+      "Test_F1_Macro": 0.6601,
       "Per_Class": {
         "Good": {
-          "Precision": 0.888,
-          "Recall": 0.888,
-          "F1": 0.888,
-          "Support": 125
+          "Precision": 0.5644,
+          "Recall": 0.2232,
+          "F1": 0.3199,
+          "Support": 923
         },
         "Moderate": {
-          "Precision": 0.9028,
-          "Recall": 0.9155,
-          "F1": 0.9091,
-          "Support": 142
+          "Precision": 0.7577,
+          "Recall": 0.7618,
+          "F1": 0.7597,
+          "Support": 2775
         },
         "Poor": {
-          "Precision": 0.8958,
-          "Recall": 0.8113,
-          "F1": 0.8515,
-          "Support": 53
+          "Precision": 0.6473,
+          "Recall": 0.587,
+          "F1": 0.6156,
+          "Support": 644
         },
         "Satisfactory": {
-          "Precision": 0.8614,
-          "Recall": 0.8827,
-          "F1": 0.872,
-          "Support": 162
+          "Precision": 0.7308,
+          "Recall": 0.8507,
+          "F1": 0.7862,
+          "Support": 3884
         },
         "Severe": {
-          "Precision": 1.0,
-          "Recall": 0.7222,
-          "F1": 0.8387,
-          "Support": 18
+          "Precision": 0.8976,
+          "Recall": 0.6564,
+          "F1": 0.7583,
+          "Support": 227
         },
         "Very Poor": {
-          "Precision": 0.9091,
-          "Recall": 0.9524,
-          "F1": 0.9302,
-          "Support": 84
+          "Precision": 0.697,
+          "Recall": 0.7467,
+          "F1": 0.721,
+          "Support": 379
         }
       }
     },
     "Random Forest Classifier": {
-      "CV_Accuracy_Mean": 0.8917,
-      "CV_Accuracy_Std": 0.0648,
-      "Test_Accuracy": 0.9503,
-      "Test_Precision_Weighted": 0.9509,
-      "Test_Recall_Weighted": 0.9503,
-      "Test_F1_Weighted": 0.9503,
-      "Test_F1_Macro": 0.9413,
+      "CV_Accuracy_Mean": 0.6743,
+      "CV_Accuracy_Std": 0.0803,
+      "CV_F1_Macro_Mean": 0.6094,
+      "CV_F1_Macro_Std": 0.0674,
+      "Test_Accuracy": 0.7711,
+      "Test_Precision_Weighted": 0.7778,
+      "Test_Recall_Weighted": 0.7711,
+      "Test_F1_Weighted": 0.7713,
+      "Test_F1_Macro": 0.7534,
       "Per_Class": {
         "Good": {
-          "Precision": 0.9837,
-          "Recall": 0.968,
-          "F1": 0.9758,
-          "Support": 125
+          "Precision": 0.6847,
+          "Recall": 0.7411,
+          "F1": 0.7118,
+          "Support": 923
         },
         "Moderate": {
-          "Precision": 0.9306,
-          "Recall": 0.9437,
-          "F1": 0.9371,
-          "Support": 142
+          "Precision": 0.8217,
+          "Recall": 0.689,
+          "F1": 0.7495,
+          "Support": 2775
         },
         "Poor": {
-          "Precision": 0.9074,
-          "Recall": 0.9245,
-          "F1": 0.9159,
-          "Support": 53
+          "Precision": 0.5877,
+          "Recall": 0.7702,
+          "F1": 0.6667,
+          "Support": 644
         },
         "Satisfactory": {
-          "Precision": 0.9568,
-          "Recall": 0.9568,
-          "F1": 0.9568,
-          "Support": 162
+          "Precision": 0.8,
+          "Recall": 0.837,
+          "F1": 0.8181,
+          "Support": 3884
         },
         "Severe": {
-          "Precision": 1.0,
-          "Recall": 0.8333,
-          "F1": 0.9091,
-          "Support": 18
+          "Precision": 0.8089,
+          "Recall": 0.8767,
+          "F1": 0.8414,
+          "Support": 227
         },
         "Very Poor": {
-          "Precision": 0.9419,
-          "Recall": 0.9643,
-          "F1": 0.9529,
-          "Support": 84
+          "Precision": 0.7614,
+          "Recall": 0.7071,
+          "F1": 0.7332,
+          "Support": 379
         }
       }
     }
