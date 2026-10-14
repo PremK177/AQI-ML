@@ -1,8 +1,8 @@
 """
 Model Training and Cross-Validation Module
 Trains and compares baseline and ensemble models for both Regression and Classification:
-- Regression: Linear Regression, Decision Tree Regressor, Random Forest Regressor
-- Classification: Logistic Regression, Random Forest Classifier
+- Regression: Linear Regression, Decision Tree, Random Forest, Extra Trees
+- Classification: Logistic Regression, tuned Random Forest Classifier
 Includes 5-Fold Cross Validation and model persistence.
 """
 
@@ -14,7 +14,7 @@ import pandas as pd
 
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.tree import DecisionTreeRegressor
-from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+from sklearn.ensemble import ExtraTreesRegressor, RandomForestRegressor, RandomForestClassifier
 from sklearn.model_selection import cross_val_score
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import (
@@ -83,7 +83,8 @@ def train_and_evaluate_all():
     reg_estimators = {
         'Linear Regression': LinearRegression(),
         'Decision Tree': DecisionTreeRegressor(max_depth=6, min_samples_split=10, random_state=42),
-        'Random Forest': RandomForestRegressor(n_estimators=100, max_depth=12, min_samples_split=5, random_state=42, n_jobs=-1)
+        'Random Forest': RandomForestRegressor(n_estimators=100, max_depth=12, min_samples_split=5, random_state=42, n_jobs=-1),
+        'Extra Trees': ExtraTreesRegressor(n_estimators=160, max_depth=None, min_samples_split=2, min_samples_leaf=2, max_features=1.0, random_state=42, n_jobs=-1)
     }
     reg_models = {name: make_pipeline(model) for name, model in reg_estimators.items()}
     
@@ -132,6 +133,7 @@ def train_and_evaluate_all():
     joblib.dump(reg_models['Linear Regression'], 'models/aqi_regressor_lr.pkl')
     joblib.dump(reg_models['Decision Tree'], 'models/aqi_regressor_dt.pkl')
     joblib.dump(reg_models['Random Forest'], 'models/aqi_regressor_rf.pkl')
+    joblib.dump(reg_models['Extra Trees'], 'models/aqi_regressor_extra_trees.pkl', compress=3)
     
     # -------------------------------------------------------------
     # CLASSIFICATION MODELS (Predicting AQI Category)
@@ -142,7 +144,7 @@ def train_and_evaluate_all():
     
     clf_estimators = {
         'Logistic Regression': LogisticRegression(max_iter=1000, random_state=42),
-        'Random Forest Classifier': RandomForestClassifier(n_estimators=100, max_depth=12, min_samples_split=5, class_weight='balanced', random_state=42, n_jobs=-1)
+        'Random Forest Classifier': RandomForestClassifier(n_estimators=160, max_depth=None, min_samples_split=2, min_samples_leaf=2, max_features=0.8, class_weight='balanced', random_state=42, n_jobs=-1)
     }
     clf_models = {name: make_pipeline(model) for name, model in clf_estimators.items()}
     
@@ -199,10 +201,10 @@ def train_and_evaluate_all():
         
         print(f"Test Accuracy: {test_acc:.4f} | Weighted F1: {test_f1:.4f} | Macro F1: {test_f1_macro:.4f}")
         
-    joblib.dump(clf_models['Random Forest Classifier'], 'models/aqi_classifier_rf.pkl')
+    joblib.dump(clf_models['Random Forest Classifier'], 'models/aqi_classifier_rf.pkl', compress=3)
 
     # Save the feature names emitted by the fitted preprocessing pipeline.
-    feature_names = reg_models['Random Forest'].named_steps['preprocess'].get_feature_names_out().tolist()
+    feature_names = reg_models['Extra Trees'].named_steps['preprocess'].get_feature_names_out().tolist()
     with open('models/feature_names.json', 'w') as f:
         json.dump(feature_names, f, indent=2)
     

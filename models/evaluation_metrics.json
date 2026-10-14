@@ -29,6 +29,16 @@
       "Test_MAE": 17.683,
       "Test_RMSE": 32.0268,
       "Test_R2": 0.9051
+    },
+    "Extra Trees": {
+      "CV_R2_Mean": 0.838,
+      "CV_R2_Std": 0.0252,
+      "Train_MAE": 6.2673,
+      "Train_RMSE": 16.2232,
+      "Train_R2": 0.9887,
+      "Test_MAE": 16.921,
+      "Test_RMSE": 29.5279,
+      "Test_R2": 0.9193
     }
   },
   "classification_metrics": {
@@ -82,50 +92,50 @@
       }
     },
     "Random Forest Classifier": {
-      "CV_Accuracy_Mean": 0.6743,
-      "CV_Accuracy_Std": 0.0803,
-      "CV_F1_Macro_Mean": 0.6094,
-      "CV_F1_Macro_Std": 0.0674,
-      "Test_Accuracy": 0.7711,
-      "Test_Precision_Weighted": 0.7778,
-      "Test_Recall_Weighted": 0.7711,
-      "Test_F1_Weighted": 0.7713,
-      "Test_F1_Macro": 0.7534,
+      "CV_Accuracy_Mean": 0.7009,
+      "CV_Accuracy_Std": 0.055,
+      "CV_F1_Macro_Mean": 0.642,
+      "CV_F1_Macro_Std": 0.058,
+      "Test_Accuracy": 0.7868,
+      "Test_Precision_Weighted": 0.7894,
+      "Test_Recall_Weighted": 0.7868,
+      "Test_F1_Weighted": 0.7866,
+      "Test_F1_Macro": 0.7634,
       "Per_Class": {
         "Good": {
-          "Precision": 0.6847,
-          "Recall": 0.7411,
-          "F1": 0.7118,
+          "Precision": 0.681,
+          "Recall": 0.6685,
+          "F1": 0.6747,
           "Support": 923
         },
         "Moderate": {
-          "Precision": 0.8217,
-          "Recall": 0.689,
-          "F1": 0.7495,
+          "Precision": 0.8415,
+          "Recall": 0.7463,
+          "F1": 0.7911,
           "Support": 2775
         },
         "Poor": {
-          "Precision": 0.5877,
-          "Recall": 0.7702,
-          "F1": 0.6667,
+          "Precision": 0.6475,
+          "Recall": 0.7329,
+          "F1": 0.6875,
           "Support": 644
         },
         "Satisfactory": {
-          "Precision": 0.8,
-          "Recall": 0.837,
-          "F1": 0.8181,
+          "Precision": 0.8012,
+          "Recall": 0.8527,
+          "F1": 0.8261,
           "Support": 3884
         },
         "Severe": {
-          "Precision": 0.8089,
-          "Recall": 0.8767,
-          "F1": 0.8414,
+          "Precision": 0.825,
+          "Recall": 0.8722,
+          "F1": 0.848,
           "Support": 227
         },
         "Very Poor": {
-          "Precision": 0.7614,
-          "Recall": 0.7071,
-          "F1": 0.7332,
+          "Precision": 0.7707,
+          "Recall": 0.7361,
+          "F1": 0.753,
           "Support": 379
         }
       }

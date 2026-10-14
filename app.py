@@ -70,7 +70,7 @@ if SRC_DIR not in sys.path:
 @st.cache_resource
 def load_models():
     label_encoder = joblib.load(os.path.join(BASE_DIR, 'models', 'label_encoder.pkl'))
-    regressor = joblib.load(os.path.join(BASE_DIR, 'models', 'aqi_regressor_rf.pkl'))
+    regressor = joblib.load(os.path.join(BASE_DIR, 'models', 'aqi_regressor_extra_trees.pkl'))
     classifier = joblib.load(os.path.join(BASE_DIR, 'models', 'aqi_classifier_rf.pkl'))
     with open(os.path.join(BASE_DIR, 'models', 'evaluation_metrics.json'), 'r') as f:
         metrics = json.load(f)
@@ -129,7 +129,7 @@ with tabs[0]:
         with col1:
             st.markdown("### 🔢 Predicted AQI Value")
             st.metric(label="Continuous Regression Output", value=f"{pred_aqi:.1f}")
-            st.caption(f"Estimated by Random Forest Regressor ($R^2$: {metrics['regression_metrics']['Random Forest']['Test_R2']})")
+            st.caption(f"Estimated by Extra Trees Regressor ($R^2$: {metrics['regression_metrics']['Extra Trees']['Test_R2']})")
             
         with col2:
             st.markdown("### 🏷️ AQI Category")
@@ -180,7 +180,7 @@ with tabs[1]:
 # TAB 3: Model Performance & Comparison
 with tabs[2]:
     st.header("📈 Model Evaluation & Comparative Analysis")
-    st.write("Benchmarking parametric linear baselines against non-linear decision trees and ensemble random forests.")
+    st.write("Benchmarking linear and tree-based models, including tuned ensemble methods.")
     
     if models_loaded:
         st.subheader("1. Regression Task Evaluation (Continuous AQI)")
@@ -221,8 +221,8 @@ with tabs[3]:
     3. **Feature Engineering**: Calendar month, weekday, weekend, city, and season from observation dates.
     4. **Data Splitting**: Chronological 80/20 train-test split; the latest dates form the test period.
     5. **Model Benchmarking**: 
-       - Regression: Linear Regression, Decision Tree, Random Forest Regressor.
-       - Classification: Logistic Regression, Random Forest Classifier.
+       - Regression: Linear Regression, Decision Tree, Random Forest, and Extra Trees.
+       - Classification: Logistic Regression and a tuned, class-balanced Random Forest.
     6. **Validation**: Five expanding-window folds grouped by date; preprocessing is refit within every fold. Xylene is excluded due to high missingness.
     7. **Deployment**: Saved artifacts, CLI inference, and interactive web dashboard.
     """)

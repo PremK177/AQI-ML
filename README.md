@@ -18,7 +18,7 @@ The project also documents how the data is prepared, how models are compared, an
    - **Classification:** estimate the supplied `AQI_Bucket` category: Good, Satisfactory, Moderate, Poor, Very Poor, or Severe.
 2. **Leakage-aware preprocessing:** retain missing pollutant readings until each training fold fits its own imputation, encoding, and scaling steps.
 3. **Exploratory analysis:** summarize distributions, missingness, seasonal patterns, and pollutant-to-AQI correlations.
-4. **Algorithm comparison:** compare linear baselines with decision-tree and random-forest models using time-ordered validation and a later-date holdout.
+4. **Algorithm comparison:** compare linear baselines, decision trees, Random Forest, and Extra Trees using time-ordered validation and a later-date holdout.
 5. **Usable outputs:** provide saved model pipelines, analysis plots, a command-line example, a notebook, and a Streamlit dashboard.
 
 ---
@@ -33,8 +33,8 @@ flowchart TD
     B --> C[Remove duplicates and rows without both targets]
     C --> D[Sort by date and form chronological holdout]
     D --> E[Fold-fitted preprocessing<br/>City × Season median imputation<br/>missing flags, calendar features, encoding, scaling]
-    E --> F[Regression models<br/>Linear, Decision Tree, Random Forest]
-    E --> G[Classification models<br/>Logistic Regression, Random Forest]
+    E --> F[Regression models<br/>Linear, Decision Tree, Random Forest, Extra Trees]
+    E --> G[Classification models<br/>Logistic Regression, tuned Random Forest]
     F --> H[MAE, RMSE, R² and regression plots]
     G --> I[Accuracy, weighted/macro F1,<br/>per-class metrics and confusion matrix]
     H --> J[Saved metrics, models and predictions]
@@ -165,7 +165,7 @@ The two targets are modeled separately. AQI category is not recalculated from th
 ### Validation Strategy
 - **Later-date holdout:** latest 20% of distinct labeled dates, beginning 2019-05-27.
 - **Five-fold expanding-window cross-validation:** each validation block contains later dates than its training data; all records on a date remain in one block.
-- Every preprocessing step is fit inside the model pipeline on each training fold. The held-out period is not used to select the Random Forest class weights; class weighting was compared using training-period macro-F1 folds.
+- Every preprocessing step is fit inside the model pipeline on each training fold. Candidate settings were compared on the same five chronological folds. Extra Trees was selected for regression by mean CV R²; the balanced Random Forest classifier was tuned for macro F1. The later-date holdout was kept separate from this selection.
 
 ### Evaluation Metrics
 - **Regression:** MAE measures average absolute error in AQI points; RMSE penalizes larger errors more strongly; R² compares explained variance with a mean-only baseline.
@@ -175,7 +175,7 @@ The two targets are modeled separately. AQI category is not recalculated from th
 
 ## 8. Algorithms Used
 
-The project compares linear baselines, a single decision tree, and random-forest ensembles. The equations below summarize the fitted model families.
+The project compares linear baselines, a single decision tree, Random Forest, and Extra Trees. The equations below summarize the fitted model families.
 
 ### Regression Algorithms
 
@@ -197,7 +197,7 @@ $$
 
 The tree captures threshold rules and nonlinear patterns without requiring feature scaling for its splits. The project limits it to `max_depth=6` with `min_samples_split=10` to constrain complexity. A single tree can still vary substantially with the training data.
 
-#### 3. Random Forest Regressor
+#### 3. Random Forest Regressor (comparison baseline)
 
 The forest fits 100 trees to bootstrap samples and averages their predictions:
 
@@ -205,7 +205,17 @@ $$
 \hat{y}_{\mathrm{RF}}(x) = \frac{1}{B}\sum_{b=1}^{B}T_b(x),\quad B=100
 $$
 
-Random feature subsets decorrelate trees, while averaging reduces the variance of an individual tree. The current estimator uses `max_depth=12` and `min_samples_split=5`.
+Random feature subsets decorrelate trees, while averaging reduces the variance of an individual tree. The comparison estimator uses `max_depth=12` and `min_samples_split=5`.
+
+#### 4. Extra Trees Regressor (selected model)
+
+Extra Trees fits 160 randomized trees. It introduces additional randomness when choosing split thresholds and averages the tree outputs:
+
+$$
+\hat{y}_{\mathrm{ET}}(x) = \frac{1}{B}\sum_{b=1}^{B}T_b(x),\quad B=160
+$$
+
+The fitted model uses `min_samples_leaf=2`. Its additional split randomness can reduce variance, and the five-fold chronological validation gave it the strongest mean R² among the compared regression candidates.
 
 ### Classification Algorithms
 
@@ -221,13 +231,13 @@ It is a linear classification baseline and produces class probabilities. The pro
 
 #### 2. Random Forest Classifier
 
-The classifier combines 100 decision trees and predicts the class with the most votes. Tree splits use Gini impurity:
+The selected classifier combines 160 decision trees and predicts the class with the most votes. Its trees use `max_features=0.8`, `min_samples_leaf=2`, and balanced class weights. Tree splits use Gini impurity:
 
 $$
 G = 1 - \sum_{k=1}^{K}p_k^2
 $$
 
-Its current estimator uses `max_depth=12`, `min_samples_split=5`, and `class_weight="balanced"`. The class weights give less frequent training categories more influence. Their use was retained based on training-period macro-F1 validation.
+Class weights give less frequent training categories more influence. The selected tree settings were chosen using training-period macro-F1 validation.
 
 ---
 
@@ -235,7 +245,7 @@ Its current estimator uses `max_depth=12`, `min_samples_split=5`, and `class_wei
 
 1. Read `data/city_day.csv`, inspect data quality, and retain labeled rows for the two supervised tasks.
 2. Reserve the later-date holdout before fitting model pipelines.
-3. Compare three regression and two classification pipelines using the same fold-local preprocessing.
+3. Compare four regression and two classification pipelines using the same fold-local preprocessing.
 4. Use five expanding date folds for model validation. Classification cross-validation reports both accuracy and macro F1.
 5. Fit each final estimator on the complete training period and evaluate it once on the held-out later dates.
 6. Save model pipelines, feature names, metrics, and test predictions under `models/` and `data/`.
@@ -258,7 +268,8 @@ AQIPredict/
 │   ├── aqi_regressor_lr.pkl                 # Preprocessing pipeline + Linear Regression
 │   ├── aqi_regressor_dt.pkl                 # Preprocessing pipeline + Decision Tree Regressor
 │   ├── aqi_regressor_rf.pkl                 # Preprocessing pipeline + Random Forest Regressor
-│   ├── aqi_classifier_rf.pkl                # Preprocessing pipeline + balanced Random Forest Classifier
+│   ├── aqi_regressor_extra_trees.pkl         # Selected pipeline + Extra Trees Regressor
+│   ├── aqi_classifier_rf.pkl                # Preprocessing pipeline + tuned balanced Random Forest Classifier
 │   ├── label_encoder.pkl                    # Mapping between category names and model labels
 │   ├── evaluation_metrics.json              # Cross-validation, holdout, and per-class metrics
 │   └── feature_names.json                   # Names emitted by the fitted preprocessing pipeline
@@ -314,29 +325,32 @@ The following results come from the held-out dates beginning 2019-05-27. Cross-v
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | Linear Regression | 0.7657 ± 0.0501 | 0.8456 | 0.8075 | 45.61 | 32.55 |
 | Decision Tree Regressor | 0.7446 ± 0.0790 | 0.8934 | 0.8658 | 38.08 | 22.34 |
-| **Random Forest Regressor** | **0.8196 ± 0.0394** | **0.9596** | **0.9051** | **32.03** | **17.68** |
+| Random Forest Regressor | 0.8196 ± 0.0394 | 0.9596 | 0.9051 | 32.03 | 17.68 |
+| **Extra Trees Regressor** | **0.8380 ± 0.0252** | **0.9887** | **0.9193** | **29.53** | **16.92** |
 
-The Random Forest leads this benchmark on the later-date test set. Its test MAE is about 17.68 AQI points and its R² is 0.9051. These values describe agreement with the supplied targets, including the large values in that file.
+Extra Trees leads the regression benchmark on both the chronological CV mean R² and the later-date test set. Compared with the prior Random Forest, test MAE fell by 0.76 AQI points (4.3%), RMSE by 2.50 points (7.8%), and R² rose by 0.0142. These values describe agreement with the supplied targets, including the large values in that file.
 
 ### 2. Classification Models (`AQI_Bucket`)
 
 | Model | CV Accuracy (mean ± SD) | CV Macro F1 (mean ± SD) | Test Accuracy | Test Weighted F1 | Test Macro F1 |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | Logistic Regression | 0.6474 ± 0.0476 | 0.5454 ± 0.0291 | 0.7285 | 0.7132 | 0.6601 |
-| **Random Forest Classifier** | **0.6743 ± 0.0803** | **0.6094 ± 0.0674** | **0.7711** | **0.7713** | **0.7534** |
+| **Tuned Random Forest Classifier** | **0.7009 ± 0.0550** | **0.6420 ± 0.0580** | **0.7868** | **0.7866** | **0.7634** |
+
+The tuned classifier improved chronological CV accuracy by 2.7 percentage points and macro F1 by 3.3 points versus the previous settings. On the later-date holdout, accuracy improved by 1.6 points, weighted F1 by 1.5 points, and macro F1 by 1.0 point.
 
 #### Random Forest Per-Category Results
 
 | Supplied category | Precision | Recall | F1 | Test rows |
 | :--- | ---: | ---: | ---: | ---: |
-| Good | 0.6847 | 0.7411 | 0.7118 | 923 |
-| Moderate | 0.8217 | 0.6890 | 0.7495 | 2,775 |
-| Poor | 0.5877 | 0.7702 | 0.6667 | 644 |
-| Satisfactory | 0.8000 | 0.8370 | 0.8181 | 3,884 |
-| Severe | 0.8089 | 0.8767 | 0.8414 | 227 |
-| Very Poor | 0.7614 | 0.7071 | 0.7332 | 379 |
+| Good | 0.6810 | 0.6685 | 0.6747 | 923 |
+| Moderate | 0.8415 | 0.7463 | 0.7911 | 2,775 |
+| Poor | 0.6475 | 0.7329 | 0.6875 | 644 |
+| Satisfactory | 0.8012 | 0.8527 | 0.8261 | 3,884 |
+| Severe | 0.8250 | 0.8722 | 0.8480 | 227 |
+| Very Poor | 0.7707 | 0.7361 | 0.7530 | 379 |
 
-Macro F1 gives each category equal weight; weighted F1 gives common classes more influence. Poor has the lowest Random Forest per-class F1 in this holdout, so the overall accuracy alone does not tell the full story.
+Macro F1 gives each category equal weight; weighted F1 gives common classes more influence. Good has the lowest per-class F1 in this holdout, so the overall accuracy alone does not tell the full story.
 
 ---
 
@@ -344,12 +358,12 @@ Macro F1 gives each category equal weight; weighted F1 gives common classes more
 
 The generated figures are saved under `plots/`. The regression scatter plot is explicitly zoomed to 0–520 for readability; the metrics above use all holdout records, including AQI outliers above that range.
 
-1. **Actual vs. predicted AQI:** `plots/results/actual_vs_predicted_regression.png` compares the three regression models with the ideal prediction line.
-2. **Residual analysis:** `plots/results/residual_analysis.png` shows the Random Forest residual distribution and residuals against predicted AQI.
+1. **Actual vs. predicted AQI:** `plots/results/actual_vs_predicted_regression.png` compares the four regression models with the ideal prediction line.
+2. **Residual analysis:** `plots/results/residual_analysis.png` shows the selected Extra Trees residual distribution and residuals against predicted AQI.
 3. **Regression comparison:** `plots/results/regression_model_comparison.png` compares holdout R² and RMSE.
 4. **Classification confusion matrix:** `plots/results/confusion_matrix_classifier.png` shows correct and mistaken category assignments for the Random Forest.
 5. **Classification comparison:** `plots/results/classification_model_comparison.png` compares accuracy, weighted F1, and macro F1 for both classifiers.
-6. **Feature importance:** `plots/results/feature_importance_ranking.png` shows impurity-based importance from the fitted Random Forest models. These scores are model-specific associations and should not be interpreted as causal effects.
+6. **Feature importance:** `plots/results/feature_importance_ranking.png` shows impurity-based importance from the fitted Extra Trees and Random Forest models. These scores are model-specific associations and should not be interpreted as causal effects.
 7. **EDA figures and tables:** `plots/eda/` contains pollutant distributions, category counts, seasonal AQI, the correlation heatmap and matrix, pollutant-AQI relationships, summary statistics, and missingness percentages.
 
 ---
@@ -359,7 +373,7 @@ The generated figures are saved under `plots/`. The regression scatter plot is e
 This project provides an end-to-end workflow for estimating numeric AQI and the category label supplied with historical city-day observations. The time-ordered split, fold-fitted preprocessing, and class-level metrics make the benchmark more informative than a random split or accuracy-only report.
 
 ### Key Conclusions and Next Steps
-1. **Model comparison:** Random Forest performs best overall in the current later-date benchmark for both the regression and classification tasks.
+1. **Model comparison:** Extra Trees performs best for regression, while the tuned Random Forest performs best for classification in the current benchmark.
 2. **Data limits:** pollutant readings and city/date coverage are uneven; imputation cannot recreate measurements that were not collected.
 3. **Verify the source:** confirm dataset provenance, units, AQI calculation method, and extreme AQI records before using results beyond this project.
 4. **Test city transfer:** hold out one or more entire cities and evaluate against an independent monitoring source.

@@ -44,11 +44,11 @@ def generate_result_visualizations(output_dir='plots/results'):
     with open('models/evaluation_metrics.json', 'r') as f:
         metrics = json.load(f)
         
-    rf_reg = joblib.load('models/aqi_regressor_rf.pkl')
+    best_reg = joblib.load('models/aqi_regressor_extra_trees.pkl')
     rf_clf = joblib.load('models/aqi_classifier_rf.pkl')
     label_encoder = joblib.load('models/label_encoder.pkl')
-    feature_names = rf_reg.named_steps['preprocess'].get_feature_names_out()
-    rf_reg_estimator = rf_reg.named_steps['model']
+    feature_names = best_reg.named_steps['preprocess'].get_feature_names_out()
+    best_reg_estimator = best_reg.named_steps['model']
     rf_clf_estimator = rf_clf.named_steps['model']
     
     print("=" * 60)
@@ -58,11 +58,13 @@ def generate_result_visualizations(output_dir='plots/results'):
     # -----------------------------------------------------------------
     # 1. ACTUAL VS PREDICTED SCATTER PLOTS (Regression Models)
     # -----------------------------------------------------------------
-    fig, axes = plt.subplots(1, 3, figsize=(18, 5.5))
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    axes = axes.ravel()
     reg_models = [
         ('Linear Regression', 'Pred_AQI_Linear Regression', '#3498db'),
         ('Decision Tree', 'Pred_AQI_Decision Tree', '#e67e22'),
-        ('Random Forest', 'Pred_AQI_Random Forest', '#2ecc71')
+        ('Random Forest', 'Pred_AQI_Random Forest', '#2ecc71'),
+        ('Extra Trees', 'Pred_AQI_Extra Trees', '#8e44ad')
     ]
     
     actual = test_df['Actual_AQI']
@@ -97,15 +99,15 @@ def generate_result_visualizations(output_dir='plots/results'):
     print(f"Saved: {os.path.join(output_dir, 'actual_vs_predicted_regression.png')}")
     
     # -----------------------------------------------------------------
-    # 2. RESIDUAL ANALYSIS (Random Forest Regressor)
+    # 2. RESIDUAL ANALYSIS (selected Extra Trees Regressor)
     # -----------------------------------------------------------------
     fig, axes = plt.subplots(1, 2, figsize=(14, 5.5))
-    rf_preds = test_df['Pred_AQI_Random Forest']
-    residuals = actual - rf_preds
+    best_preds = test_df['Pred_AQI_Extra Trees']
+    residuals = actual - best_preds
     
     # Residual distribution
     sns.histplot(residuals, kde=True, ax=axes[0], color='#27ae60', bins=35)
-    axes[0].set_title('Residual Error Distribution (Random Forest)', fontweight='bold')
+    axes[0].set_title('Residual Error Distribution (Extra Trees)', fontweight='bold')
     axes[0].set_xlabel('Residual (Actual - Predicted AQI)')
     axes[0].set_ylabel('Frequency')
     axes[0].axvline(0, color='red', linestyle='--', linewidth=1.5)
@@ -113,7 +115,7 @@ def generate_result_visualizations(output_dir='plots/results'):
     axes[0].legend()
     
     # Residuals vs Predicted
-    axes[1].scatter(rf_preds, residuals, alpha=0.5, color='#2980b9', edgecolors='none', s=25)
+    axes[1].scatter(best_preds, residuals, alpha=0.5, color='#2980b9', edgecolors='none', s=25)
     axes[1].axhline(0, color='red', linestyle='--', linewidth=1.5)
     axes[1].set_title('Residuals vs Predicted Values (Homoscedasticity Check)', fontweight='bold')
     axes[1].set_xlabel('Predicted AQI')
@@ -132,7 +134,7 @@ def generate_result_visualizations(output_dir='plots/results'):
     r2_scores = [metrics['regression_metrics'][m]['Test_R2'] for m in models_list]
     rmse_scores = [metrics['regression_metrics'][m]['Test_RMSE'] for m in models_list]
     
-    colors = ['#3498db', '#e67e22', '#2ecc71']
+    colors = ['#3498db', '#e67e22', '#2ecc71', '#8e44ad'][:len(models_list)]
     
     # R2 Comparison
     b1 = axes[0].bar(models_list, r2_scores, color=colors, edgecolor='black', alpha=0.85)
@@ -216,11 +218,11 @@ def generate_result_visualizations(output_dir='plots/results'):
     fig, axes = plt.subplots(1, 2, figsize=(16, 7))
     
     # Regressor feature importance
-    reg_importances = pd.Series(rf_reg_estimator.feature_importances_, index=feature_names).sort_values(ascending=True)
+    reg_importances = pd.Series(best_reg_estimator.feature_importances_, index=feature_names).sort_values(ascending=True)
     # Top 10 features
     top_reg = reg_importances.tail(10)
     top_reg.plot(kind='barh', ax=axes[0], color='#2980b9', edgecolor='black', alpha=0.85)
-    axes[0].set_title('Top 10 Feature Importances (Random Forest Regressor)', fontweight='bold')
+    axes[0].set_title('Top 10 Feature Importances (Extra Trees Regressor)', fontweight='bold')
     axes[0].set_xlabel('Relative Gini Importance')
     for i, v in enumerate(top_reg):
         axes[0].text(v + 0.005, i, f'{v:.3f}', va='center', fontweight='bold', fontsize=9)

@@ -16,7 +16,7 @@ class AQIPredictor:
     def __init__(self, models_dir=None):
         models_dir = models_dir or os.path.join(PROJECT_DIR, 'models')
         self.label_encoder = joblib.load(os.path.join(models_dir, 'label_encoder.pkl'))
-        self.regressor = joblib.load(os.path.join(models_dir, 'aqi_regressor_rf.pkl'))
+        self.regressor = joblib.load(os.path.join(models_dir, 'aqi_regressor_extra_trees.pkl'))
         self.classifier = joblib.load(os.path.join(models_dir, 'aqi_classifier_rf.pkl'))
 
     def predict(self, input_dict):
