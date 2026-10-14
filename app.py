@@ -13,7 +13,57 @@ import pandas as pd
 import sys
 import streamlit as st
 
-from src.preprocess import HOURLY_FEATURE_COLUMNS, POLLUTANT_COLUMNS, aggregate_hourly_features
+from src import preprocess as project_preprocess
+
+POLLUTANT_COLUMNS = project_preprocess.POLLUTANT_COLUMNS
+HOURLY_SUMMARY_STATS = ('mean', 'median', 'std', 'max', 'min', 'count')
+HOURLY_FEATURE_COLUMNS = getattr(
+    project_preprocess,
+    'HOURLY_FEATURE_COLUMNS',
+    [
+        f'Hourly_{pollutant}_{stat}'
+        for pollutant in POLLUTANT_COLUMNS
+        for stat in HOURLY_SUMMARY_STATS
+    ],
+)
+
+
+def _aggregate_hourly_features_compat(hourly_df):
+    """Support deployments whose preprocess module predates hourly summaries."""
+    datetime_column = 'Datetime' if 'Datetime' in hourly_df.columns else 'Date'
+    required = {'City', datetime_column}
+    missing = required.difference(hourly_df.columns)
+    if missing:
+        raise ValueError(f'Hourly data is missing required columns: {sorted(missing)}')
+
+    frame = hourly_df[['City', datetime_column] + [
+        column for column in POLLUTANT_COLUMNS if column in hourly_df
+    ]].copy()
+    frame = frame.rename(columns={datetime_column: 'Date'})
+    frame['Date'] = pd.to_datetime(frame['Date'], errors='coerce').dt.normalize()
+    frame['City'] = frame['City'].astype('string').str.strip()
+    frame = frame.dropna(subset=['Date', 'City'])
+    for column in POLLUTANT_COLUMNS:
+        if column not in frame:
+            frame[column] = np.nan
+        frame[column] = pd.to_numeric(frame[column], errors='coerce').replace(
+            [np.inf, -np.inf], np.nan
+        )
+
+    summaries = frame.groupby(['City', 'Date'], observed=True)[POLLUTANT_COLUMNS].agg(
+        list(HOURLY_SUMMARY_STATS)
+    )
+    summaries.columns = [
+        f'Hourly_{pollutant}_{stat}' for pollutant, stat in summaries.columns
+    ]
+    return summaries.reset_index()
+
+
+aggregate_hourly_features = getattr(
+    project_preprocess,
+    'aggregate_hourly_features',
+    _aggregate_hourly_features_compat,
+)
 
 # Configure page layout
 st.set_page_config(
