@@ -1,7 +1,7 @@
 """
 Visualization of Results Module
 Generates high-resolution graphical representations of model performance:
-1. Actual vs Predicted AQI Scatter Plot (Comparison of Linear Reg, Decision Tree, Random Forest)
+1. Actual vs Predicted AQI Scatter Plot (daily-only and hourly-summary models)
 2. Residual Error Analysis (Distribution & Residuals vs Predicted)
 3. Regression Performance Comparison Bar Chart (R2 & RMSE)
 4. Multi-class Confusion Matrix for AQI Classification
@@ -44,8 +44,8 @@ def generate_result_visualizations(output_dir='plots/results'):
     with open('models/evaluation_metrics.json', 'r') as f:
         metrics = json.load(f)
         
-    best_reg = joblib.load('models/aqi_regressor_extra_trees.pkl')
-    rf_clf = joblib.load('models/aqi_classifier_rf.pkl')
+    best_reg = joblib.load('models/aqi_regressor_extra_trees_hourly.pkl')
+    rf_clf = joblib.load('models/aqi_classifier_rf_hourly.pkl')
     label_encoder = joblib.load('models/label_encoder.pkl')
     feature_names = best_reg.named_steps['preprocess'].get_feature_names_out()
     best_reg_estimator = best_reg.named_steps['model']
@@ -58,13 +58,15 @@ def generate_result_visualizations(output_dir='plots/results'):
     # -----------------------------------------------------------------
     # 1. ACTUAL VS PREDICTED SCATTER PLOTS (Regression Models)
     # -----------------------------------------------------------------
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    fig, axes = plt.subplots(2, 3, figsize=(21, 10))
     axes = axes.ravel()
     reg_models = [
         ('Linear Regression', 'Pred_AQI_Linear Regression', '#3498db'),
         ('Decision Tree', 'Pred_AQI_Decision Tree', '#e67e22'),
         ('Random Forest', 'Pred_AQI_Random Forest', '#2ecc71'),
-        ('Extra Trees', 'Pred_AQI_Extra Trees', '#8e44ad')
+        ('Extra Trees', 'Pred_AQI_Extra Trees', '#8e44ad'),
+        ('Extra Trees + Hourly Summaries', 'Pred_AQI_Extra Trees + Hourly Summaries', '#16a085'),
+        ('Random Forest + Hourly Summaries', 'Pred_AQI_Random Forest + Hourly Summaries', '#c0392b')
     ]
     
     actual = test_df['Actual_AQI']
@@ -88,6 +90,9 @@ def generate_result_visualizations(output_dir='plots/results'):
         ax.set_xlim(min_val, max_val)
         ax.set_ylim(min_val, max_val)
         ax.legend(loc='upper left')
+
+    for ax in axes[len(reg_models):]:
+        ax.set_visible(False)
         
     plt.suptitle(
         'Actual vs Predicted AQI on Test Set (axes zoomed to 0–520; metrics use all rows)',
@@ -102,7 +107,7 @@ def generate_result_visualizations(output_dir='plots/results'):
     # 2. RESIDUAL ANALYSIS (selected Extra Trees Regressor)
     # -----------------------------------------------------------------
     fig, axes = plt.subplots(1, 2, figsize=(14, 5.5))
-    best_preds = test_df['Pred_AQI_Extra Trees']
+    best_preds = test_df['Pred_AQI_Extra Trees + Hourly Summaries']
     residuals = actual - best_preds
     
     # Residual distribution
@@ -134,7 +139,7 @@ def generate_result_visualizations(output_dir='plots/results'):
     r2_scores = [metrics['regression_metrics'][m]['Test_R2'] for m in models_list]
     rmse_scores = [metrics['regression_metrics'][m]['Test_RMSE'] for m in models_list]
     
-    colors = ['#3498db', '#e67e22', '#2ecc71', '#8e44ad'][:len(models_list)]
+    colors = plt.cm.tab10(np.linspace(0, 1, len(models_list)))
     
     # R2 Comparison
     b1 = axes[0].bar(models_list, r2_scores, color=colors, edgecolor='black', alpha=0.85)
@@ -166,11 +171,11 @@ def generate_result_visualizations(output_dir='plots/results'):
     plt.figure(figsize=(8, 6.5))
     classes = list(label_encoder.classes_)
     y_true_clf = test_df['Actual_Category']
-    y_pred_clf = test_df['Pred_Category_Random Forest Classifier']
+    y_pred_clf = test_df['Pred_Category_Random Forest + Hourly Summaries']
     
     cm = confusion_matrix(y_true_clf, y_pred_clf, labels=classes)
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=classes, yticklabels=classes, cbar=False)
-    plt.title('Confusion Matrix - Random Forest Classifier (AQI Category)', fontsize=14, pad=15)
+    plt.title('Confusion Matrix - Random Forest with Hourly Summaries', fontsize=14, pad=15)
     plt.xlabel('Predicted Category', fontweight='bold')
     plt.ylabel('Actual Category', fontweight='bold')
     plt.xticks(rotation=30, ha='right')
@@ -197,7 +202,7 @@ def generate_result_visualizations(output_dir='plots/results'):
     plt.bar(x + width, macro_f1_scores, width, label='Macro F1 (%)', color='#e67e22', edgecolor='black', alpha=0.85)
     
     plt.ylabel('Score (%)', fontweight='bold')
-    plt.title('Classification Performance: Logistic Regression vs Random Forest', fontsize=14, pad=15)
+    plt.title('Classification Performance: Logistic Regression and Random Forest Variants', fontsize=14, pad=15)
     plt.xticks(x, clf_names, fontweight='bold')
     plt.ylim(0, 100)
     
@@ -222,7 +227,7 @@ def generate_result_visualizations(output_dir='plots/results'):
     # Top 10 features
     top_reg = reg_importances.tail(10)
     top_reg.plot(kind='barh', ax=axes[0], color='#2980b9', edgecolor='black', alpha=0.85)
-    axes[0].set_title('Top 10 Feature Importances (Extra Trees Regressor)', fontweight='bold')
+    axes[0].set_title('Top 10 Feature Importances (Extra Trees with Hourly Summaries)', fontweight='bold')
     axes[0].set_xlabel('Relative Gini Importance')
     for i, v in enumerate(top_reg):
         axes[0].text(v + 0.005, i, f'{v:.3f}', va='center', fontweight='bold', fontsize=9)
@@ -231,7 +236,7 @@ def generate_result_visualizations(output_dir='plots/results'):
     clf_importances = pd.Series(rf_clf_estimator.feature_importances_, index=feature_names).sort_values(ascending=True)
     top_clf = clf_importances.tail(10)
     top_clf.plot(kind='barh', ax=axes[1], color='#27ae60', edgecolor='black', alpha=0.85)
-    axes[1].set_title('Top 10 Feature Importances (Random Forest Classifier)', fontweight='bold')
+    axes[1].set_title('Top 10 Feature Importances (Random Forest with Hourly Summaries)', fontweight='bold')
     axes[1].set_xlabel('Relative Gini Importance')
     for i, v in enumerate(top_clf):
         axes[1].text(v + 0.005, i, f'{v:.3f}', va='center', fontweight='bold', fontsize=9)

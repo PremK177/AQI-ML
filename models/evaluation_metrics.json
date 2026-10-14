@@ -39,6 +39,26 @@
       "Test_MAE": 16.921,
       "Test_RMSE": 29.5279,
       "Test_R2": 0.9193
+    },
+    "Extra Trees + Hourly Summaries": {
+      "CV_R2_Mean": 0.8602,
+      "CV_R2_Std": 0.025,
+      "Train_MAE": 3.1319,
+      "Train_RMSE": 10.7483,
+      "Train_R2": 0.995,
+      "Test_MAE": 14.9763,
+      "Test_RMSE": 28.4502,
+      "Test_R2": 0.9251
+    },
+    "Random Forest + Hourly Summaries": {
+      "CV_R2_Mean": 0.8471,
+      "CV_R2_Std": 0.028,
+      "Train_MAE": 11.8596,
+      "Train_RMSE": 28.0104,
+      "Train_R2": 0.9664,
+      "Test_MAE": 15.0506,
+      "Test_RMSE": 28.7173,
+      "Test_R2": 0.9237
     }
   },
   "classification_metrics": {
@@ -136,6 +156,55 @@
           "Precision": 0.7707,
           "Recall": 0.7361,
           "F1": 0.753,
+          "Support": 379
+        }
+      }
+    },
+    "Random Forest + Hourly Summaries": {
+      "CV_Accuracy_Mean": 0.7161,
+      "CV_Accuracy_Std": 0.0439,
+      "CV_F1_Macro_Mean": 0.6674,
+      "CV_F1_Macro_Std": 0.0392,
+      "Test_Accuracy": 0.8036,
+      "Test_Precision_Weighted": 0.8085,
+      "Test_Recall_Weighted": 0.8036,
+      "Test_F1_Weighted": 0.8036,
+      "Test_F1_Macro": 0.7832,
+      "Per_Class": {
+        "Good": {
+          "Precision": 0.7044,
+          "Recall": 0.7616,
+          "F1": 0.7319,
+          "Support": 923
+        },
+        "Moderate": {
+          "Precision": 0.8672,
+          "Recall": 0.7366,
+          "F1": 0.7966,
+          "Support": 2775
+        },
+        "Poor": {
+          "Precision": 0.6612,
+          "Recall": 0.7547,
+          "F1": 0.7049,
+          "Support": 644
+        },
+        "Satisfactory": {
+          "Precision": 0.816,
+          "Recall": 0.8702,
+          "F1": 0.8423,
+          "Support": 3884
+        },
+        "Severe": {
+          "Precision": 0.8319,
+          "Recall": 0.8722,
+          "F1": 0.8516,
+          "Support": 227
+        },
+        "Very Poor": {
+          "Precision": 0.7901,
+          "Recall": 0.7546,
+          "F1": 0.7719,
           "Support": 379
         }
       }

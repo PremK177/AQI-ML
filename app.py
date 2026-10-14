@@ -1,9 +1,10 @@
 """
 Streamlit Web Application: Air Quality Index (AQI) Estimation & Analysis
-Interactive dashboard for same-day estimates from supplied historical-style inputs,
+Interactive dashboard for daily estimates from supplied historical-style inputs,
 exploratory data analysis, and model performance benchmarking.
 """
 
+import io
 import os
 import json
 import joblib
@@ -12,7 +13,7 @@ import pandas as pd
 import sys
 import streamlit as st
 
-from src.preprocess import POLLUTANT_COLUMNS
+from src.preprocess import HOURLY_FEATURE_COLUMNS, POLLUTANT_COLUMNS, aggregate_hourly_features
 
 # Configure page layout
 st.set_page_config(
@@ -72,12 +73,35 @@ def load_models():
     label_encoder = joblib.load(os.path.join(BASE_DIR, 'models', 'label_encoder.pkl'))
     regressor = joblib.load(os.path.join(BASE_DIR, 'models', 'aqi_regressor_extra_trees.pkl'))
     classifier = joblib.load(os.path.join(BASE_DIR, 'models', 'aqi_classifier_rf.pkl'))
+    hourly_regressor = joblib.load(os.path.join(BASE_DIR, 'models', 'aqi_regressor_extra_trees_hourly.pkl'))
+    hourly_classifier = joblib.load(os.path.join(BASE_DIR, 'models', 'aqi_classifier_rf_hourly.pkl'))
     with open(os.path.join(BASE_DIR, 'models', 'evaluation_metrics.json'), 'r') as f:
         metrics = json.load(f)
-    return label_encoder, regressor, classifier, metrics
+    return label_encoder, regressor, classifier, hourly_regressor, hourly_classifier, metrics
+
+
+@st.cache_data(show_spinner=False, ttl=3600, max_entries=3)
+def hourly_features_for_selection(csv_bytes, selected_city, selected_date):
+    header = pd.read_csv(io.BytesIO(csv_bytes), nrows=0)
+    time_column = 'Datetime' if 'Datetime' in header.columns else 'Date'
+    if 'City' not in header.columns or time_column not in header.columns:
+        raise ValueError('The CSV needs City and Datetime columns (or City and Date).')
+    usecols = ['City', time_column] + [c for c in POLLUTANT_COLUMNS if c in header.columns]
+    uploaded_frame = pd.read_csv(io.BytesIO(csv_bytes), usecols=usecols, low_memory=False)
+    parsed_dates = pd.to_datetime(uploaded_frame[time_column], errors='coerce').dt.normalize()
+    city_mask = uploaded_frame['City'].astype('string').str.strip().eq(selected_city)
+    date_mask = parsed_dates.eq(pd.Timestamp(selected_date))
+    selected_hours = uploaded_frame.loc[city_mask & date_mask].copy()
+    if selected_hours.empty:
+        return None
+    daily_summary = aggregate_hourly_features(selected_hours)
+    return {
+        'row_count': len(selected_hours),
+        'features': daily_summary.iloc[0][HOURLY_FEATURE_COLUMNS].to_dict(),
+    }
 
 try:
-    label_encoder, regressor, classifier, metrics = load_models()
+    label_encoder, regressor, classifier, hourly_regressor, hourly_classifier, metrics = load_models()
     models_loaded = True
 except Exception as e:
     st.error(f"Error loading models: {e}. Please ensure train_models.py has executed.")
@@ -94,19 +118,45 @@ date_input = st.sidebar.date_input(
     min_value=sidebar_data['Date'].min().date(),
     max_value=sidebar_data['Date'].max().date()
 )
-st.sidebar.caption("Enter observed daily pollutant readings. Missing entries are estimated from training data.")
+st.sidebar.caption("Enter daily pollutant readings. Optionally upload hourly records for a more detailed daily estimate.")
+uploaded_hourly = st.sidebar.file_uploader(
+    "Hourly readings CSV (optional)", type=['csv'],
+    help="Can be the full city_hour.csv or records for one city and date. Needs City, Datetime, and pollutant columns.",
+)
+hourly_feature_input = None
+hourly_daily_means = {}
+if uploaded_hourly is not None:
+    try:
+        selected_summary = hourly_features_for_selection(uploaded_hourly.getvalue(), city, str(date_input))
+        if selected_summary is None:
+            st.sidebar.warning("No hourly rows matched the selected city and date. The daily-only model will be used.")
+        else:
+            hourly_feature_input = selected_summary['features']
+            hourly_daily_means = {
+                pollutant: hourly_feature_input.get(f'Hourly_{pollutant}_mean')
+                for pollutant in POLLUTANT_COLUMNS
+            }
+            st.sidebar.success(f"Using {selected_summary['row_count']} matched hourly records for the enhanced daily estimate.")
+    except Exception as exc:
+        st.sidebar.warning(f"Could not use the uploaded hourly file: {exc}. The daily-only model will be used.")
+
 input_dict = {'Date': str(date_input), 'City': city}
 for pollutant in POLLUTANT_COLUMNS:
     values = sidebar_data[pollutant].dropna()
     center = float(values.median()) if len(values) else 0.0
     upper = float(values.quantile(0.995)) if len(values) else 100.0
+    uploaded_mean = hourly_daily_means.get(pollutant)
+    default_value = float(uploaded_mean) if pd.notna(uploaded_mean) else center
+    input_max = max(upper * 2, center + 1, default_value if pd.notna(uploaded_mean) else 0.0)
     input_dict[pollutant] = st.sidebar.number_input(
         f"{pollutant} concentration",
         min_value=0.0,
-        max_value=max(upper * 2, center + 1),
-        value=center,
-        step=max(center / 20, 0.1),
-        format="%.2f"
+        max_value=input_max,
+        value=max(default_value, 0.0),
+        step=max(default_value / 20, 0.1),
+        format="%.2f",
+        disabled=pd.notna(uploaded_mean),
+        help="When matching hourly data is uploaded, this value is calculated from that day's hourly readings."
     )
 
 # Main Dashboard Layout
@@ -118,18 +168,27 @@ tabs = st.tabs(["🎯 AQI Scenario Estimate", "📊 Exploratory Data Analysis", 
 # TAB 1: AQI Scenario Estimate
 with tabs[0]:
     if models_loaded:
-        X_in = pd.DataFrame([input_dict])
-        pred_aqi = float(regressor.predict(X_in)[0])
-        pred_cat_idx = classifier.predict(X_in)[0]
+        enhanced_daily_estimate = hourly_feature_input is not None
+        active_regressor = hourly_regressor if enhanced_daily_estimate else regressor
+        active_classifier = hourly_classifier if enhanced_daily_estimate else classifier
+        active_reg_key = 'Extra Trees + Hourly Summaries' if enhanced_daily_estimate else 'Extra Trees'
+        model_inputs = {**input_dict, **(hourly_feature_input or {})}
+        X_in = pd.DataFrame([model_inputs])
+        pred_aqi = float(active_regressor.predict(X_in)[0])
+        pred_cat_idx = active_classifier.predict(X_in)[0]
         pred_cat = label_encoder.inverse_transform([pred_cat_idx])[0]
-        cat_probs = classifier.predict_proba(X_in)[0]
+        cat_probs = active_classifier.predict_proba(X_in)[0]
         
         col1, col2, col3 = st.columns([1.2, 1.2, 1.6])
         
         with col1:
             st.markdown("### 🔢 Predicted AQI Value")
             st.metric(label="Continuous Regression Output", value=f"{pred_aqi:.1f}")
-            st.caption(f"Estimated by Extra Trees Regressor ($R^2$: {metrics['regression_metrics']['Extra Trees']['Test_R2']})")
+            st.caption(f"Estimated by {active_reg_key} ($R^2$: {metrics['regression_metrics'][active_reg_key]['Test_R2']})")
+            if enhanced_daily_estimate:
+                st.caption("Hourly summaries from the uploaded city-date records were included.")
+            else:
+                st.caption("Upload hourly records for this city and date to use within-day summaries.")
             
         with col2:
             st.markdown("### 🏷️ AQI Category")
@@ -190,8 +249,8 @@ with tabs[2]:
         st.subheader("2. Classification Task Evaluation (AQI Health Category)")
         clf_df = pd.DataFrame(metrics['classification_metrics']).T
         st.dataframe(clf_df[['Test_Accuracy', 'Test_F1_Weighted', 'Test_F1_Macro', 'Test_Precision_Weighted', 'Test_Recall_Weighted', 'CV_Accuracy_Mean']].style.highlight_max(subset=['Test_Accuracy', 'Test_F1_Weighted', 'Test_F1_Macro'], color='#dcfce7'))
-        rf_per_class = metrics['classification_metrics']['Random Forest Classifier']['Per_Class']
-        st.caption("Random Forest per-class scores (reveals performance on less common AQI categories)")
+        rf_per_class = metrics['classification_metrics']['Random Forest + Hourly Summaries']['Per_Class']
+        st.caption("Hourly-enhanced Random Forest per-class scores")
         st.dataframe(pd.DataFrame(rf_per_class).T.rename_axis('AQI category'))
         
     st.markdown("---")
@@ -217,14 +276,14 @@ with tabs[3]:
     st.markdown("""
     ### Machine Learning Pipeline Flow
     1. **Data Ingestion**: City-day observations from 26 Indian cities (2015–2020), with pollutant measurements and AQI labels.
-    2. **Data Preprocessing**: Drop rows without AQI targets; retain missing pollutant readings; fit city-season median imputation, missingness flags, encoding, and scaling inside each model pipeline.
-    3. **Feature Engineering**: Calendar month, weekday, weekend, city, and season from observation dates.
+    2. **Data Preprocessing**: Drop rows without daily AQI targets; retain missing readings; fit city-season median imputation, missingness flags, encoding, and scaling inside each model pipeline.
+    3. **Feature Engineering**: Calendar features plus optional city-date hourly pollutant mean, median, spread, extrema, and valid-hour counts.
     4. **Data Splitting**: Chronological 80/20 train-test split; the latest dates form the test period.
     5. **Model Benchmarking**: 
-       - Regression: Linear Regression, Decision Tree, Random Forest, and Extra Trees.
-       - Classification: Logistic Regression and a tuned, class-balanced Random Forest.
+       - Regression: Linear Regression, Decision Tree, Random Forest, and Extra Trees, each with daily-only and hourly-enhanced variants where applicable.
+       - Classification: Logistic Regression and a tuned, class-balanced Random Forest with daily-only and hourly-enhanced variants.
     6. **Validation**: Five expanding-window folds grouped by date; preprocessing is refit within every fold. Xylene is excluded due to high missingness.
-    7. **Deployment**: Saved artifacts, CLI inference, and interactive web dashboard.
+    7. **Deployment**: Saved daily-only and hourly-enhanced artifacts, CLI inference, and interactive web dashboard.
     """)
     
     st.subheader("Dataset sample")

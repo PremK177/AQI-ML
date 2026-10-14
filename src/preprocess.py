@@ -14,7 +14,38 @@ POLLUTANT_COLUMNS = [
     'PM2.5', 'PM10', 'NO', 'NO2', 'NOx', 'NH3', 'CO', 'SO2', 'O3',
     'Benzene', 'Toluene'
 ]
+HOURLY_SUMMARY_STATS = ('mean', 'median', 'std', 'max', 'min', 'count')
+HOURLY_FEATURE_COLUMNS = [
+    f'Hourly_{pollutant}_{stat}'
+    for pollutant in POLLUTANT_COLUMNS
+    for stat in HOURLY_SUMMARY_STATS
+]
 AQI_CLASSES = ['Good', 'Satisfactory', 'Moderate', 'Poor', 'Very Poor', 'Severe']
+
+
+def aggregate_hourly_features(hourly_df):
+    """Summarize pollutant readings by city and date without using AQI labels."""
+    datetime_column = 'Datetime' if 'Datetime' in hourly_df.columns else 'Date'
+    required = {'City', datetime_column}
+    missing = required.difference(hourly_df.columns)
+    if missing:
+        raise ValueError(f'Hourly data is missing required columns: {sorted(missing)}')
+
+    frame = hourly_df[['City', datetime_column] + [c for c in POLLUTANT_COLUMNS if c in hourly_df]].copy()
+    frame = frame.rename(columns={datetime_column: 'Date'})
+    frame['Date'] = pd.to_datetime(frame['Date'], errors='coerce').dt.normalize()
+    frame['City'] = frame['City'].astype('string').str.strip()
+    frame = frame.dropna(subset=['Date', 'City'])
+    for col in POLLUTANT_COLUMNS:
+        if col not in frame:
+            frame[col] = np.nan
+        frame[col] = pd.to_numeric(frame[col], errors='coerce').replace([np.inf, -np.inf], np.nan)
+
+    summaries = frame.groupby(['City', 'Date'], observed=True)[POLLUTANT_COLUMNS].agg(
+        ['mean', 'median', 'std', 'max', 'min', 'count']
+    )
+    summaries.columns = [f'Hourly_{pollutant}_{stat}' for pollutant, stat in summaries.columns]
+    return summaries.reset_index()
 
 
 def load_and_inspect_raw_data(filepath='data/city_day.csv'):
@@ -73,17 +104,19 @@ class AQIPreprocessor(BaseEstimator, TransformerMixin):
     def fit(self, X, y=None):
         frame = X.copy()
         self.pollutant_columns_ = [c for c in POLLUTANT_COLUMNS if c in frame.columns]
+        self.hourly_feature_columns_ = [c for c in HOURLY_FEATURE_COLUMNS if c in frame.columns]
+        self.numeric_columns_ = self.pollutant_columns_ + self.hourly_feature_columns_
         missing = set(POLLUTANT_COLUMNS).difference(frame.columns)
         if missing:
             # Old or reduced inputs can omit predictors; keep only available
             # columns while enforcing that the model has at least one pollutant.
             if not self.pollutant_columns_:
                 raise ValueError('At least one supported pollutant feature is required')
-        self.input_columns_ = ['Date', 'City'] + self.pollutant_columns_
+        self.input_columns_ = ['Date', 'City'] + self.numeric_columns_
         frame = self._prepare_context(frame)
         self.city_season_medians_ = {}
         self.global_medians_ = {}
-        for col in self.pollutant_columns_:
+        for col in self.numeric_columns_:
             self.global_medians_[col] = float(frame[col].median())
             if not np.isfinite(self.global_medians_[col]):
                 raise ValueError(f'No observed training values for pollutant {col}')
@@ -108,7 +141,8 @@ class AQIPreprocessor(BaseEstimator, TransformerMixin):
 
     def _impute(self, frame):
         frame = frame.copy()
-        for col in self.pollutant_columns_:
+        numeric_columns = getattr(self, 'numeric_columns_', self.pollutant_columns_)
+        for col in numeric_columns:
             missing = frame[col].isna()
             if missing.any():
                 lookup = self.city_season_medians_[col]
@@ -125,10 +159,13 @@ class AQIPreprocessor(BaseEstimator, TransformerMixin):
         frame['Date'] = pd.to_datetime(frame['Date'], errors='coerce')
         frame['Season'] = frame['Date'].dt.month.map(season_from_month)
         frame['City'] = frame['City'].astype('string').fillna('Unknown')
-        for col in self.pollutant_columns_:
+        numeric_columns = getattr(self, 'numeric_columns_', self.pollutant_columns_)
+        missing_flags = {}
+        for col in numeric_columns:
             frame[col] = pd.to_numeric(frame[col], errors='coerce')
             frame[col] = frame[col].replace([np.inf, -np.inf], np.nan)
-            frame[f'{col}_WasMissing'] = frame[col].isna().astype(float)
+            missing_flags[f'{col}_WasMissing'] = frame[col].isna().astype(float)
+        frame = pd.concat([frame, pd.DataFrame(missing_flags, index=frame.index)], axis=1)
         return frame
 
     def _make_features(self, frame, fit):
@@ -145,9 +182,17 @@ class AQIPreprocessor(BaseEstimator, TransformerMixin):
         return np.asarray(self.feature_names_out_, dtype=object)
 
 
-def prepare_and_split_data(df, test_size=0.2):
+def prepare_and_split_data(df, test_size=0.2, additional_feature_cols=None):
     """Create a chronological holdout, keeping all same-date city rows together."""
-    feature_cols = ['Date', 'City'] + [c for c in POLLUTANT_COLUMNS if c in df.columns]
+    additional_feature_cols = additional_feature_cols or []
+    unknown_features = set(additional_feature_cols).difference(df.columns)
+    if unknown_features:
+        raise ValueError(f'Additional feature columns are missing: {sorted(unknown_features)}')
+    feature_cols = (
+        ['Date', 'City']
+        + [c for c in POLLUTANT_COLUMNS if c in df.columns]
+        + list(additional_feature_cols)
+    )
     if len(feature_cols) <= 2:
         raise ValueError('No supported pollutant columns found in the dataset')
     X = df[feature_cols].copy()
@@ -171,7 +216,7 @@ def prepare_and_split_data(df, test_size=0.2):
     joblib.dump(label_encoder, 'models/label_encoder.pkl')
     print(f'Total labeled samples: {len(X)}')
     print(f'Training samples: {len(X_train)}; test samples: {len(X_test)}; test begins {pd.Timestamp(test_start).date()}')
-    print(f'Predictor columns ({len(feature_cols) - 2} pollutants): {feature_cols[2:]}')
+    print(f'Predictor columns ({len(feature_cols) - 2} features): {feature_cols[2:]}')
     return {
         'X_train': X_train, 'X_test': X_test,
         'y_train_reg': y_train_reg, 'y_test_reg': y_test_reg,

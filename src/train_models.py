@@ -23,7 +23,10 @@ from sklearn.metrics import (
     make_scorer
 )
 
-from preprocess import AQIPreprocessor, load_and_inspect_raw_data, clean_data, prepare_and_split_data
+from preprocess import (
+    AQIPreprocessor, HOURLY_FEATURE_COLUMNS, load_and_inspect_raw_data,
+    aggregate_hourly_features, clean_data, prepare_and_split_data,
+)
 
 
 def chronological_date_splits(X, n_splits=5):
@@ -59,9 +62,23 @@ def train_and_evaluate_all():
     clean_df = clean_data(raw_df, impute=False)
     clean_df.to_csv('data/air_quality_data_clean.csv', index=False)
     data = prepare_and_split_data(clean_df, test_size=0.2)
+
+    # Summaries use pollutant readings only; AQI and AQI_Bucket from city_hour
+    # are deliberately excluded to prevent target leakage.
+    hourly_df = pd.read_csv('data/city_hour.csv', low_memory=False)
+    hourly_features = aggregate_hourly_features(hourly_df)
+    clean_with_hourly = clean_df.merge(
+        hourly_features, on=['City', 'Date'], how='left', validate='one_to_one'
+    )
+    data_hourly = prepare_and_split_data(
+        clean_with_hourly, test_size=0.2,
+        additional_feature_cols=HOURLY_FEATURE_COLUMNS,
+    )
     
     X_train = data['X_train']
     X_test = data['X_test']
+    X_train_hourly = data_hourly['X_train']
+    X_test_hourly = data_hourly['X_test']
     
     y_train_reg = data['y_train_reg']
     y_test_reg = data['y_test_reg']
@@ -84,7 +101,9 @@ def train_and_evaluate_all():
         'Linear Regression': LinearRegression(),
         'Decision Tree': DecisionTreeRegressor(max_depth=6, min_samples_split=10, random_state=42),
         'Random Forest': RandomForestRegressor(n_estimators=100, max_depth=12, min_samples_split=5, random_state=42, n_jobs=-1),
-        'Extra Trees': ExtraTreesRegressor(n_estimators=160, max_depth=None, min_samples_split=2, min_samples_leaf=2, max_features=1.0, random_state=42, n_jobs=-1)
+        'Extra Trees': ExtraTreesRegressor(n_estimators=160, max_depth=None, min_samples_split=2, min_samples_leaf=2, max_features=1.0, random_state=42, n_jobs=-1),
+        'Extra Trees + Hourly Summaries': ExtraTreesRegressor(n_estimators=160, max_depth=None, min_samples_split=2, min_samples_leaf=2, max_features=1.0, random_state=42, n_jobs=-1),
+        'Random Forest + Hourly Summaries': RandomForestRegressor(n_estimators=160, max_depth=None, min_samples_split=2, min_samples_leaf=4, max_features=0.8, random_state=42, n_jobs=-1)
     }
     reg_models = {name: make_pipeline(model) for name, model in reg_estimators.items()}
     
@@ -94,16 +113,18 @@ def train_and_evaluate_all():
     
     for name, model in reg_models.items():
         print(f"\n--- Training {name} Regressor ---")
+        model_X_train = X_train_hourly if name.endswith('+ Hourly Summaries') else X_train
+        model_X_test = X_test_hourly if name.endswith('+ Hourly Summaries') else X_test
         # For tree models, scaled or unscaled yields identical trees, but scaled features keep inputs uniform
-        model.fit(X_train, y_train_reg)
+        model.fit(model_X_train, y_train_reg)
         
         # 5-fold cross-validation on training data to assess generalization
-        cv_scores = cross_val_score(model, X_train, y_train_reg, cv=cv_splits, scoring='r2')
+        cv_scores = cross_val_score(model, model_X_train, y_train_reg, cv=cv_splits, scoring='r2')
         print(f"5-Fold chronological CV R2 Score: {cv_scores.mean():.4f} (+/- {cv_scores.std():.4f})")
         
         # Predictions
-        y_train_pred = model.predict(X_train)
-        y_test_pred = model.predict(X_test)
+        y_train_pred = model.predict(model_X_train)
+        y_test_pred = model.predict(model_X_test)
         reg_predictions[name] = y_test_pred
         
         # Metrics
@@ -134,6 +155,8 @@ def train_and_evaluate_all():
     joblib.dump(reg_models['Decision Tree'], 'models/aqi_regressor_dt.pkl')
     joblib.dump(reg_models['Random Forest'], 'models/aqi_regressor_rf.pkl')
     joblib.dump(reg_models['Extra Trees'], 'models/aqi_regressor_extra_trees.pkl', compress=3)
+    joblib.dump(reg_models['Extra Trees + Hourly Summaries'], 'models/aqi_regressor_extra_trees_hourly.pkl', compress=3)
+    joblib.dump(reg_models['Random Forest + Hourly Summaries'], 'models/aqi_regressor_rf_hourly.pkl', compress=3)
     
     # -------------------------------------------------------------
     # CLASSIFICATION MODELS (Predicting AQI Category)
@@ -144,7 +167,8 @@ def train_and_evaluate_all():
     
     clf_estimators = {
         'Logistic Regression': LogisticRegression(max_iter=1000, random_state=42),
-        'Random Forest Classifier': RandomForestClassifier(n_estimators=160, max_depth=None, min_samples_split=2, min_samples_leaf=2, max_features=0.8, class_weight='balanced', random_state=42, n_jobs=-1)
+        'Random Forest Classifier': RandomForestClassifier(n_estimators=160, max_depth=None, min_samples_split=2, min_samples_leaf=2, max_features=0.8, class_weight='balanced', random_state=42, n_jobs=-1),
+        'Random Forest + Hourly Summaries': RandomForestClassifier(n_estimators=160, max_depth=None, min_samples_split=2, min_samples_leaf=2, max_features=0.8, class_weight='balanced', random_state=42, n_jobs=-1)
     }
     clf_models = {name: make_pipeline(model) for name, model in clf_estimators.items()}
     
@@ -152,19 +176,21 @@ def train_and_evaluate_all():
     clf_predictions = {}
     for name, model in clf_models.items():
         print(f"\n--- Training {name} ---")
-        model.fit(X_train, y_train_clf)
+        model_X_train = X_train_hourly if name.endswith('+ Hourly Summaries') else X_train
+        model_X_test = X_test_hourly if name.endswith('+ Hourly Summaries') else X_test
+        model.fit(model_X_train, y_train_clf)
         
         # 5-fold cross-validation
-        cv_scores = cross_val_score(model, X_train, y_train_clf, cv=cv_splits, scoring='accuracy')
+        cv_scores = cross_val_score(model, model_X_train, y_train_clf, cv=cv_splits, scoring='accuracy')
         print(f"5-Fold chronological CV Accuracy: {cv_scores.mean():.4f} (+/- {cv_scores.std():.4f})")
         cv_macro_scores = cross_val_score(
-            model, X_train, y_train_clf, cv=cv_splits,
+            model, model_X_train, y_train_clf, cv=cv_splits,
             scoring=make_scorer(f1_score, average='macro', zero_division=0)
         )
         print(f"5-Fold chronological CV Macro F1: {cv_macro_scores.mean():.4f} (+/- {cv_macro_scores.std():.4f})")
         
-        y_train_pred = model.predict(X_train)
-        y_test_pred = model.predict(X_test)
+        y_train_pred = model.predict(model_X_train)
+        y_test_pred = model.predict(model_X_test)
         clf_predictions[name] = y_test_pred
         
         test_acc = accuracy_score(y_test_clf, y_test_pred)
@@ -202,11 +228,15 @@ def train_and_evaluate_all():
         print(f"Test Accuracy: {test_acc:.4f} | Weighted F1: {test_f1:.4f} | Macro F1: {test_f1_macro:.4f}")
         
     joblib.dump(clf_models['Random Forest Classifier'], 'models/aqi_classifier_rf.pkl', compress=3)
+    joblib.dump(clf_models['Random Forest + Hourly Summaries'], 'models/aqi_classifier_rf_hourly.pkl', compress=3)
 
     # Save the feature names emitted by the fitted preprocessing pipeline.
     feature_names = reg_models['Extra Trees'].named_steps['preprocess'].get_feature_names_out().tolist()
     with open('models/feature_names.json', 'w') as f:
         json.dump(feature_names, f, indent=2)
+    hourly_feature_names = reg_models['Extra Trees + Hourly Summaries'].named_steps['preprocess'].get_feature_names_out().tolist()
+    with open('models/feature_names_hourly.json', 'w') as f:
+        json.dump(hourly_feature_names, f, indent=2)
     
     # Save evaluation summary to JSON
     summary = {
@@ -217,7 +247,7 @@ def train_and_evaluate_all():
         json.dump(summary, f, indent=2)
         
     # Save predictions and test data for plotting
-    test_data_export = X_test.copy()
+    test_data_export = X_test_hourly.copy()
     test_data_export['Actual_AQI'] = y_test_reg.values
     test_data_export['Actual_Category'] = label_encoder.inverse_transform(y_test_clf)
     for model_name, preds in reg_predictions.items():
@@ -234,6 +264,7 @@ def train_and_evaluate_all():
         'reg_models': reg_models,
         'clf_models': clf_models,
         'data': data,
+        'data_hourly': data_hourly,
         'reg_predictions': reg_predictions,
         'clf_predictions': clf_predictions
     }
