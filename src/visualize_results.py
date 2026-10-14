@@ -134,15 +134,25 @@ def generate_result_visualizations(output_dir='plots/results'):
     # -----------------------------------------------------------------
     # 3. REGRESSION METRICS COMPARISON (Bar Chart)
     # -----------------------------------------------------------------
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
     models_list = list(metrics['regression_metrics'].keys())
+    # Wrap labels at word boundaries so all six model names remain readable.
+    label_map = {
+        'Linear Regression': 'Linear\nRegression',
+        'Decision Tree': 'Decision\nTree',
+        'Random Forest': 'Random\nForest',
+        'Extra Trees': 'Extra\nTrees',
+        'Extra Trees + Hourly Summaries': 'Extra Trees\n+ Hourly',
+        'Random Forest + Hourly Summaries': 'Random Forest\n+ Hourly',
+    }
+    model_labels = [label_map.get(name, name) for name in models_list]
     r2_scores = [metrics['regression_metrics'][m]['Test_R2'] for m in models_list]
     rmse_scores = [metrics['regression_metrics'][m]['Test_RMSE'] for m in models_list]
     
     colors = plt.cm.tab10(np.linspace(0, 1, len(models_list)))
     
     # R2 Comparison
-    b1 = axes[0].bar(models_list, r2_scores, color=colors, edgecolor='black', alpha=0.85)
+    b1 = axes[0].bar(model_labels, r2_scores, color=colors, edgecolor='black', alpha=0.85)
     axes[0].set_title('Test $R^2$ Score (Higher is Better)', fontweight='bold')
     axes[0].set_ylabel('$R^2$ Score')
     axes[0].set_ylim(0, 1.02)
@@ -151,7 +161,7 @@ def generate_result_visualizations(output_dir='plots/results'):
         axes[0].text(bar.get_x() + bar.get_width()/2., height + 0.005, f'{height:.4f}', ha='center', va='bottom', fontweight='bold')
         
     # RMSE Comparison
-    b2 = axes[1].bar(models_list, rmse_scores, color=colors, edgecolor='black', alpha=0.85)
+    b2 = axes[1].bar(model_labels, rmse_scores, color=colors, edgecolor='black', alpha=0.85)
     axes[1].set_title('Test RMSE Error (Lower is Better)', fontweight='bold')
     axes[1].set_ylabel('RMSE (AQI Units)')
     axes[1].set_ylim(0, max(rmse_scores) * 1.2)
@@ -159,8 +169,10 @@ def generate_result_visualizations(output_dir='plots/results'):
         height = bar.get_height()
         axes[1].text(bar.get_x() + bar.get_width()/2., height + 0.5, f'{height:.2f}', ha='center', va='bottom', fontweight='bold')
         
-    plt.suptitle('Regression Model Performance Benchmark', fontsize=15, y=1.02)
-    plt.tight_layout()
+    for ax in axes:
+        ax.tick_params(axis='x', labelsize=9)
+    plt.suptitle('Regression Model Performance Benchmark', fontsize=15, y=0.98)
+    fig.tight_layout(rect=(0, 0.04, 1, 0.94), w_pad=2.2)
     plt.savefig(os.path.join(output_dir, 'regression_model_comparison.png'), bbox_inches='tight')
     plt.close()
     print(f"Saved: {os.path.join(output_dir, 'regression_model_comparison.png')}")
