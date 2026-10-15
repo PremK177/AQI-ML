@@ -185,9 +185,9 @@ The project compares linear baselines, a single decision tree, Random Forest, an
 
 #### 1. Linear Regression
 
-$$
-\hat{y} = \beta_0 + \sum_{j=1}^{p}\beta_j x_j
-$$
+```text
+y_hat = beta_0 + sum(j = 1..p, beta_j * x_j)
+```
 
 The model fits coefficients by minimizing squared residuals, `Σ(yᵢ − ŷᵢ)²`. It provides a simple baseline and is easy to inspect, but a single linear equation cannot represent every nonlinear interaction in the data.
 
@@ -195,9 +195,9 @@ The model fits coefficients by minimizing squared residuals, `Σ(yᵢ − ŷᵢ)
 
 At each split, the tree chooses a partition that reduces within-leaf squared error. For leaf region `Rₘ`:
 
-$$
-\operatorname{MSE}(R_m) = \frac{1}{N_m}\sum_{i \in R_m}(y_i - \bar{y}_m)^2
-$$
+```text
+MSE(R_m) = (1 / N_m) * sum(i in R_m, (y_i - y_bar_m)^2)
+```
 
 The tree captures threshold rules and nonlinear patterns without requiring feature scaling for its splits. The project limits it to `max_depth=6` with `min_samples_split=10` to constrain complexity. A single tree can still vary substantially with the training data.
 
@@ -205,9 +205,9 @@ The tree captures threshold rules and nonlinear patterns without requiring featu
 
 The forest fits 100 trees to bootstrap samples and averages their predictions:
 
-$$
-\hat{y}_{\mathrm{RF}}(x) = \frac{1}{B}\sum_{b=1}^{B}T_b(x),\quad B=100
-$$
+```text
+y_hat_RF(x) = (1 / B) * sum(b = 1..B, T_b(x)), where B = 100
+```
 
 Random feature subsets decorrelate trees, while averaging reduces the variance of an individual tree. The comparison estimator uses `max_depth=12` and `min_samples_split=5`.
 
@@ -215,9 +215,9 @@ Random feature subsets decorrelate trees, while averaging reduces the variance o
 
 Extra Trees fits 160 randomized trees. It introduces additional randomness when choosing split thresholds and averages the tree outputs:
 
-$$
-\hat{y}_{\mathrm{ET}}(x) = \frac{1}{B}\sum_{b=1}^{B}T_b(x),\quad B=160
-$$
+```text
+y_hat_ET(x) = (1 / B) * sum(b = 1..B, T_b(x)), where B = 160
+```
 
 The fitted model uses `min_samples_leaf=2`. Its additional split randomness can reduce variance. An enhanced version of this model also uses the hourly summaries described below.
 
@@ -231,9 +231,9 @@ For each modeled pollutant, the daily pipeline can also use six statistics from 
 
 For `K` classes, the multinomial model applies softmax to class scores:
 
-$$
-P(Y=k\mid x) = \frac{e^{\beta_k^T x}}{\sum_{j=1}^{K} e^{\beta_j^T x}}
-$$
+```text
+P(Y = k | x) = exp(beta_k^T * x) / sum(j = 1..K, exp(beta_j^T * x))
+```
 
 It is a linear classification baseline and produces class probabilities. The project uses `max_iter=1000`; the output probabilities are not calibrated.
 
@@ -241,9 +241,15 @@ It is a linear classification baseline and produces class probabilities. The pro
 
 The selected classifier combines 160 decision trees and predicts the class with the most votes. Its trees use `max_features=0.8`, `min_samples_leaf=2`, and balanced class weights. The enhanced classifier also receives the hourly-summary features. Tree splits use Gini impurity:
 
-$$
-G = 1 - \sum_{k=1}^{K}p_k^2
-$$
+```text
+G = 1 - sum(k = 1..K, p_k^2)
+```
+
+The classifier's final prediction is the class receiving the most tree votes:
+
+```text
+y_hat_RF(x) = mode(T_1(x), T_2(x), ..., T_B(x))
+```
 
 Class weights give less frequent training categories more influence. The selected tree settings were chosen using training-period macro-F1 validation.
 
