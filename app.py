@@ -210,12 +210,12 @@ for pollutant in POLLUTANT_COLUMNS:
     )
 
 # Main Dashboard Layout
-st.markdown('<div class="main-header">Air Quality Index (AQI) Prediction & Analysis</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Machine Learning Mini-Project | Comparative Modeling of Atmospheric Pollutants</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">Air Quality Dashboard</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Estimate a daily AQI value and its category from city, date, and pollutant inputs.</div>', unsafe_allow_html=True)
 
-tabs = st.tabs(["🎯 AQI Scenario Estimate", "📊 Exploratory Data Analysis", "📈 Model Benchmarks & Results", "🏗️ System Architecture & Data"])
+tabs = st.tabs(["🌫️ AQI Dashboard", "📊 EDA & Model Results"])
 
-# TAB 1: AQI Scenario Estimate
+# TAB 1: AQI estimation dashboard
 with tabs[0]:
     if models_loaded:
         enhanced_daily_estimate = hourly_feature_input is not None
@@ -266,10 +266,10 @@ with tabs[0]:
         st.markdown("---")
         st.caption("Model estimate trained from historical India city-day observations. It is not a measured AQI, future forecast, or official public-health advisory.")
 
-# TAB 2: Exploratory Data Analysis
+# TAB 2: EDA, model results, and project details
 with tabs[1]:
-    st.header("📊 Exploratory Data Analysis (EDA)")
-    st.write("Exploration of pollutant distributions, city observations, calendar seasons, missingness, and AQI relationships.")
+    st.header("📊 Exploratory Data Analysis & Model Results")
+    st.write("Explore the project data and review how the regression and classification models performed.")
     
     eda_plots = [
         ("Pollutant Distribution Histograms & KDE", "plots/eda/pollutant_distributions.png"),
@@ -286,9 +286,7 @@ with tabs[1]:
             st.image(full_img_path, width="stretch")
             st.markdown("---")
 
-# TAB 3: Model Performance & Comparison
-with tabs[2]:
-    st.header("📈 Model Evaluation & Comparative Analysis")
+    st.markdown("## 📈 Model Evaluation & Comparative Analysis")
     st.write("Benchmarking linear and tree-based models, including tuned ensemble methods.")
     
     if models_loaded:
@@ -320,10 +318,9 @@ with tabs[2]:
             st.image(full_img_path, width="stretch")
             st.markdown("---")
 
-# TAB 4: Architecture & Dataset
-with tabs[3]:
-    st.header("🏗️ System Architecture & Dataset Inspection")
-    st.markdown("""
+    st.markdown("---")
+    with st.expander("🏗️ System Architecture & Dataset Inspection"):
+        st.markdown("""
     ### Machine Learning Pipeline Flow
     1. **Data Ingestion**: City-day observations from 26 Indian cities (2015–2020), with pollutant measurements and AQI labels.
     2. **Data Preprocessing**: Drop rows without daily AQI targets; retain missing readings; fit city-season median imputation, missingness flags, encoding, and scaling inside each model pipeline.
@@ -334,7 +331,7 @@ with tabs[3]:
        - Classification: Logistic Regression and a tuned, class-balanced Random Forest with daily-only and hourly-enhanced variants.
     6. **Validation**: Five expanding-window folds grouped by date; preprocessing is refit within every fold. Xylene is excluded due to high missingness.
     7. **Deployment**: Saved daily-only and hourly-enhanced artifacts, CLI inference, and interactive web dashboard.
-    """)
+        """)
     
-    st.subheader("Dataset sample")
-    st.dataframe(sidebar_data.head(20))
+        st.subheader("Dataset sample")
+        st.dataframe(sidebar_data.head(20))
